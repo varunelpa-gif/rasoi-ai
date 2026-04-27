@@ -1,12 +1,8 @@
 "use client";
 import { createContext, useContext, useState, useCallback, useRef, useEffect, ReactNode } from "react";
-import { VOICE_LINES } from "@/lib/data";
+import { VOICE_LINES, STOCK, MENU_ITEMS, STAFF, SUPPLIERS } from "@/lib/data";
 
-export interface VoiceEntry {
-  user: string;
-  ai: string;
-  time: string;
-}
+export interface VoiceEntry { user: string; ai: string; time: string; }
 
 interface VoiceCtx {
   state: "idle" | "listening" | "processing" | "speaking";
@@ -23,99 +19,195 @@ const Ctx = createContext<VoiceCtx>({
   trigger: () => {}, screen: "dashboard", setScreen: () => {}, supported: false,
 });
 
+function loadData<T>(key: string, fallback: T): T {
+  if (typeof window === "undefined") return fallback;
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw);
+    return (Array.isArray(parsed) && parsed.length > 0 ? parsed : fallback) as T;
+  } catch { return fallback; }
+}
+
 function smartResponse(transcript: string, screen: string): string {
-  const t = transcript.toLowerCase();
+  const t = transcript.toLowerCase().trim();
 
-  // Read live data from localStorage for real responses
-  const load = <T,>(key: string, fallback: T): T => {
-    if (typeof window === "undefined") return fallback;
-    try { return JSON.parse(localStorage.getItem(key) || "") ?? fallback; } catch { return fallback; }
-  };
+  const stock   = loadData("rasoi_stock",     STOCK);
+  const menu    = loadData("rasoi_menu",      MENU_ITEMS);
+  const staff   = loadData("rasoi_staff",     STAFF);
+  const suppliers = loadData("rasoi_suppliers", SUPPLIERS);
 
+  // ── Global queries ────────────────────────────────────────────
+  if (t.includes("help") || t.includes("what can you"))
+    return `On ${screen}, you can ask about ${screen === "inventory" ? "stock levels, low items, and reorders" : screen === "recipe" ? "recipe steps, ingredients, and substitutes" : screen === "menu" ? "margins, best sellers, and revenue" : screen === "staff" ? "who is on shift and station assignments" : screen === "timers" ? "timer status and kitchen timing" : screen === "suppliers" ? "delivery schedules and order status" : "today's status, stock alerts, and team"}.`;
+
+  if (t.includes("revenue") || t.includes("money") || t.includes("profit")) {
+    const rev = menu.reduce((s: number, i: any) => s + i.price * i.sales, 0);
+    const top = [...menu].sort((a: any, b: any) => b.margin - a.margin)[0];
+    return `Monthly revenue is approximately ₹${rev.toLocaleString("en-IN")}. Best margin dish is ${top?.name} at ${top?.margin}%.`;
+  }
+
+  if (t.includes("stock") && !["inventory", "timers"].includes(screen)) {
+    const low = stock.filter((s: any) => s.stock <= s.reorder);
+    return low.length > 0
+      ? `${low.length} items need reordering: ${low.slice(0, 3).map((i: any) => i.name).join(", ")}. Head to inventory for details.`
+      : "All stock levels are healthy right now.";
+  }
+
+  // ── Screen-specific ───────────────────────────────────────────
   switch (screen) {
-    case "inventory": {
-      const stock = load<typeof import("@/lib/data").STOCK>("rasoi_stock", []);
+
+    case "dashboard": {
       const low = stock.filter((s: any) => s.stock <= s.reorder);
-      if (t.includes("low") || t.includes("critical") || t.includes("running out")) {
-        if (low.length === 0) return "All stock levels are healthy right now. No reorders needed.";
-        return `${low.length} item${low.length > 1 ? "s" : ""} need reordering: ${low.map((i: any) => `${i.name} (${i.stock} ${i.unit})`).join(", ")}. Place orders today.`;
-      }
-      const item = stock.find((s: any) => t.includes(s.name.toLowerCase().split(" ")[0]));
-      if (item) return `${item.name}: ${item.stock} ${item.unit} in stock. ${item.stock <= item.reorder ? "Below reorder level — order soon from " + item.supplier + "." : "Stock is healthy."}`;
-      return `Tracking ${stock.length} items. ${low.length} need reordering. ${low.length > 0 ? "Critical: " + low[0].name + "." : "All levels healthy."}`;
+      const day = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][new Date().getDay()];
+      const onDuty = staff.filter((s: any) => s.shifts.includes(day));
+      const top = [...menu].sort((a: any, b: any) => b.margin - a.margin)[0];
+      if (t.includes("staff") || t.includes("team")) return `${onDuty.length} staff on duty today: ${onDuty.slice(0,3).map((s: any) => s.name.split(" ")[0]).join(", ")}.`;
+      if (t.includes("alert") || t.includes("issue")) return low.length > 0 ? `${low.length} stock alerts: ${low.map((i: any) => i.name).join(", ")}.` : "No alerts. Kitchen is running smoothly.";
+      if (t.includes("margin") || t.includes("dish")) return top ? `Best margin tonight is ${top.name} at ${top.margin}%. Push it on your specials board.` : "Check menu planning for margin details.";
+      return `Kitchen status: ${onDuty.length} staff on duty, ${low.length} stock alert${low.length !== 1 ? "s" : ""}. Best margin: ${top?.name} at ${top?.margin}%.`;
     }
+
+    case "inventory": {
+      const low = stock.filter((s: any) => s.stock <= s.reorder);
+      const critical = stock.filter((s: any) => (s.stock / s.max) * 100 <= 20);
+      if (t.includes("critical") || t.includes("urgent") || t.includes("empty")) {
+        return critical.length > 0
+          ? `Critical items: ${critical.map((i: any) => `${i.name} — only ${i.stock}${i.unit} left`).join(", ")}. Order immediately.`
+          : "Nothing critical. All items have stock above 20%.";
+      }
+      if (t.includes("low") || t.includes("reorder") || t.includes("running out")) {
+        return low.length > 0
+          ? `${low.length} items below reorder level: ${low.map((i: any) => `${i.name} (${i.stock}${i.unit})`).join(", ")}.`
+          : "All items above reorder levels. Stock is healthy.";
+      }
+      if (t.includes("dairy") || t.includes("milk") || t.includes("paneer") || t.includes("ghee") || t.includes("cream")) {
+        const dairy = stock.filter((s: any) => s.cat === "Dairy");
+        return `Dairy items: ${dairy.map((i: any) => `${i.name} ${i.stock}${i.unit}`).join(", ")}.`;
+      }
+      if (t.includes("spice") || t.includes("masala") || t.includes("chilli")) {
+        const spices = stock.filter((s: any) => s.cat === "Spices");
+        return `Spices: ${spices.map((i: any) => `${i.name} ${i.stock}${i.unit}`).join(", ")}.`;
+      }
+      const item = stock.find((s: any) => s.name.toLowerCase().split(" ").some((w: string) => t.includes(w) && w.length > 3));
+      if (item) return `${item.name}: ${item.stock} ${item.unit} in stock. ${item.stock <= item.reorder ? `Below reorder level — order from ${item.supplier}.` : "Stock is healthy."}`;
+      return `Tracking ${stock.length} items. ${low.length} need reordering${low.length > 0 ? ": " + low.slice(0,2).map((i: any) => i.name).join(", ") : ""}.`;
+    }
+
     case "recipe": {
-      const recipes = load<typeof import("@/lib/data").RECIPES>("rasoi_recipes", []);
-      const active = recipes.find((r: any) => r.active);
-      if (t.includes("substitute") || t.includes("replace")) {
-        const match = active?.ingredients.find((i: any) => i.sub && t.includes(i.name.toLowerCase().split(" ")[0]));
-        return match?.sub ? `Substitute for ${match.name}: ${match.sub}.` : "For cream, use cashew paste soaked overnight. For ghee, clarified butter works well.";
+      const recipes = loadData("rasoi_recipes", [] as any[]);
+      const active = recipes.find((r: any) => r.active) || recipes[0];
+      if (t.includes("substitute") || t.includes("replace") || t.includes("instead")) {
+        const match = active?.ingredients?.find((i: any) => i.sub && t.split(" ").some((w: string) => i.name.toLowerCase().includes(w)));
+        if (match?.sub) return `Substitute for ${match.name}: ${match.sub}.`;
+        return "For cream, use cashew paste soaked overnight for richness. For ghee, use butter. For paneer, firm tofu works in vegan versions.";
       }
-      if (t.includes("ingredient")) return active ? `${active.name} needs: ${active.ingredients.map((i: any) => i.name).join(", ")}.` : "Select a recipe to see its ingredients.";
-      if (t.includes("step") || t.includes("next")) return active ? `Current recipe: ${active.name}. ${active.steps[0].text}` : "Select a recipe from the list to get started.";
-      return `You have ${recipes.length} recipes. ${active ? `Currently active: ${active.name}.` : "Tap a recipe card to activate it."} Say the recipe name for details.`;
+      if (t.includes("ingredient") || t.includes("need") || t.includes("what") && t.includes("use")) {
+        return active ? `${active.name} needs: ${active.ingredients?.map((i: any) => `${i.name} ${i.qty}`).join(", ")}.` : "Select a recipe to see its ingredients.";
+      }
+      if (t.includes("step") || t.includes("next") || t.includes("how")) {
+        return active ? `${active.name}, step 1: ${active.steps?.[0]?.text}` : "Select a recipe card to begin.";
+      }
+      if (t.includes("time") || t.includes("long") || t.includes("minute")) {
+        return active ? `${active.name} takes ${active.time} total, serving ${active.serves}. Allow extra time for mise en place.` : "Prep times vary — check the recipe card for details.";
+      }
+      return active ? `Currently on ${active.name}. Ask me for steps, ingredients, timing, or substitutes.` : `You have ${recipes.length} recipes. Tap a recipe card to activate it.`;
     }
+
+    case "techniques": {
+      if (t.includes("julienne") || t.includes("matchstick")) return "Julienne: square off sides first. Cut into 5cm planks at 2mm thick, stack them, then slice into 2mm matchsticks. Keep knuckles curled as a blade guide.";
+      if (t.includes("dum") || t.includes("biryani") || t.includes("sealed")) return "Dum: seal your pot with atta dough, lowest flame possible. 30–45 minutes — never lift the lid mid-cook. The trapped steam is doing all the work.";
+      if (t.includes("tadka") || t.includes("tarka") || t.includes("tempering")) return "Tarka: heat ghee until shimmering, add whole spices, wait 20–30 seconds until they splutter, then pour immediately. The sizzle sound tells you it's ready.";
+      if (t.includes("brunoise") || t.includes("fine dice")) return "Brunoise is a 3mm precision dice. First julienne at exactly 3mm, then cross-cut at 3mm. Use a ruler to practise — consistency is everything.";
+      if (t.includes("chiffonade") || t.includes("herb") || t.includes("ribbon")) return "Chiffonade: stack leaves face-down in the same direction, roll into a tight cigar, slice into thin ribbons crosswise. Sharp knife only — dull blades bruise the herbs.";
+      if (t.includes("bhuno") || t.includes("bhuning") || t.includes("saute")) return "Bhunoing is dry-roasting masala on high heat with constant stirring. Cook until oil visibly separates from the sides — that's when you know the rawness is gone.";
+      if (t.includes("quenelle") || t.includes("plating")) return "Quenelle: warm two spoons in hot water, scoop into one, transfer back and forth shaping into an oval. Minimal contact when placing on the plate.";
+      return "Ask me about any technique: julienne, chiffonade, brunoise, dum cooking, tarka, bhunoing, quenelle, or herb oil.";
+    }
+
+    case "timers": {
+      if (t.includes("biryani") || t.includes("dum")) return "Biryani dum typically needs 25–30 minutes on lowest flame after sealing. Set a 5-minute warning to prepare your garnish plate.";
+      if (t.includes("dal") || t.includes("makhani")) return "Dal Makhani slow-cook: minimum 30 minutes, up to 2 hours for restaurant quality. Stir every 5 minutes and add a splash of water if it thickens too much.";
+      if (t.includes("bread") || t.includes("naan") || t.includes("roti")) return "Naan in tandoor: 90 seconds each side at high heat. Watch for char spots — that's the flavour. Butter immediately after pulling.";
+      if (t.includes("how many") || t.includes("active") || t.includes("running")) return "Use the timer panel to check active timers. Any timer under 2 minutes shows in red as urgent.";
+      return "Tap the plus button to add a new timer. I can help with timing for any dish — just name it.";
+    }
+
     case "menu": {
-      const items = load<typeof import("@/lib/data").MENU_ITEMS>("rasoi_menu", []);
-      const byMargin = [...items].sort((a: any, b: any) => b.margin - a.margin);
-      const bySales = [...items].sort((a: any, b: any) => b.sales - a.sales);
-      if (t.includes("margin") || t.includes("profit")) return `Top margin: ${byMargin.slice(0, 3).map((i: any) => `${i.name} at ${i.margin}%`).join(", ")}.`;
-      if (t.includes("popular") || t.includes("selling")) return `Best sellers: ${bySales.slice(0, 3).map((i: any) => `${i.name} — ${i.sales} orders`).join(", ")}.`;
-      const revenue = items.reduce((s: number, i: any) => s + i.price * i.sales, 0);
-      return `${items.length} dishes on menu. Estimated revenue: ₹${revenue.toLocaleString("en-IN")}. Top earner: ${byMargin[0]?.name}.`;
+      const byMargin = [...menu].sort((a: any, b: any) => b.margin - a.margin);
+      const bySales  = [...menu].sort((a: any, b: any) => b.sales - a.sales);
+      if (t.includes("margin") || t.includes("profit") || t.includes("best")) return `Top margin dishes: ${byMargin.slice(0,3).map((i: any) => `${i.name} at ${i.margin}%`).join(", ")}.`;
+      if (t.includes("popular") || t.includes("selling") || t.includes("order")) return `Best sellers this month: ${bySales.slice(0,3).map((i: any) => `${i.name} — ${i.sales} orders`).join(", ")}.`;
+      if (t.includes("low") || t.includes("worst") || t.includes("poor")) return `Lowest margin: ${byMargin.slice(-2).reverse().map((i: any) => `${i.name} at ${i.margin}%`).join(", ")}. Consider reviewing ingredient costs.`;
+      if (t.includes("revenue") || t.includes("total")) {
+        const rev = menu.reduce((s: number, i: any) => s + i.price * i.sales, 0);
+        return `Estimated monthly revenue: ₹${rev.toLocaleString("en-IN")} across ${menu.length} dishes.`;
+      }
+      const item = menu.find((i: any) => i.name.toLowerCase().split(" ").some((w: string) => t.includes(w) && w.length > 3));
+      if (item) return `${item.name}: costs ₹${item.cost}, priced at ₹${item.price}, margin ${item.margin}%, sold ${item.sales} this month.`;
+      return `${menu.length} dishes on menu. Best earner: ${byMargin[0]?.name} at ${byMargin[0]?.margin}% margin.`;
     }
+
     case "staff": {
-      const staff = load<typeof import("@/lib/data").STAFF>("rasoi_staff", []);
       const day = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][new Date().getDay()];
       const today = staff.filter((s: any) => s.shifts.includes(day));
-      if (t.includes("today") || t.includes("who") || t.includes("working")) return today.length > 0 ? `${today.length} on duty today: ${today.map((s: any) => `${s.name} on ${s.station}`).join(", ")}.` : "No staff scheduled today.";
-      return `${staff.length} team members. ${today.length} working today (${day}).`;
+      if (t.includes("today") || t.includes("who") || t.includes("working") || t.includes("duty") || t.includes("shift")) {
+        return today.length > 0
+          ? `${today.length} on duty today (${day}): ${today.map((s: any) => `${s.name} on ${s.station}`).join(", ")}.`
+          : `No staff scheduled for ${day}.`;
+      }
+      if (t.includes("station") || t.includes("grill") || t.includes("tandoor") || t.includes("section")) {
+        return today.length > 0
+          ? `Station assignments today: ${today.map((s: any) => `${s.name.split(" ")[0]} → ${s.station}`).join(", ")}.`
+          : "No staff on shift today.";
+      }
+      if (t.includes("leave") || t.includes("off") || t.includes("absent")) {
+        const off = staff.filter((s: any) => !s.shifts.includes(day));
+        return off.length > 0 ? `${off.length} staff off today: ${off.map((s: any) => s.name.split(" ")[0]).join(", ")}.` : "All staff scheduled today.";
+      }
+      return `${staff.length} team members total. ${today.length} working today (${day}).`;
     }
+
     case "suppliers": {
-      const suppliers = load<typeof import("@/lib/data").SUPPLIERS>("rasoi_suppliers", []);
       const pending = suppliers.filter((s: any) => s.status === "order-placed");
-      if (t.includes("deliver")) return `Daily deliveries from: ${suppliers.filter((s: any) => s.delivery === "Daily").map((s: any) => s.name).join(", ")}. ${pending.length} orders in transit.`;
-      const top = [...suppliers].sort((a: any, b: any) => b.rating - a.rating)[0];
-      return `${suppliers.length} suppliers. ${pending.length} pending orders. Highest rated: ${top?.name} at ${top?.rating}★.`;
-    }
-    case "dashboard": {
-      const stock = load<typeof import("@/lib/data").STOCK>("rasoi_stock", []);
-      const menu = load<typeof import("@/lib/data").MENU_ITEMS>("rasoi_menu", []);
-      const staff = load<typeof import("@/lib/data").STAFF>("rasoi_staff", []);
-      const low = stock.filter((s: any) => s.stock <= s.reorder).length;
-      const day = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][new Date().getDay()];
-      const onDuty = staff.filter((s: any) => s.shifts.includes(day)).length;
-      const top = [...menu].sort((a: any, b: any) => b.margin - a.margin)[0];
-      return `Kitchen status: ${onDuty} staff on duty, ${low} stock alert${low !== 1 ? "s" : ""}. Best margin tonight: ${top?.name} at ${top?.margin}%.`;
-    }
-    case "techniques": {
-      if (t.includes("julienne")) return "Julienne: square off sides for stability, cut 2mm planks, stack and slice into 2mm matchsticks. Curl your knuckles as a blade guide.";
-      if (t.includes("dum")) return "Dum cooking: seal your pot with atta dough, lowest flame, 30 to 45 minutes. Never open mid-cook — trapped steam is the whole technique.";
-      if (t.includes("tadka") || t.includes("tarka")) return "Tarka: heat ghee until shimmering, add whole spices and let them splutter 20 seconds, pour immediately. The sizzle is the signal.";
-      if (t.includes("brunoise")) return "Brunoise is a fine 3mm dice. First julienne at exactly 3mm, then cross-cut. Use a ruler to practice consistency — it makes the difference.";
-      break;
-    }
-    case "timers": {
-      if (t.includes("biryani")) return "For biryani dum, set 25 minutes. At 5 minutes remaining, prepare your garnish — the timing is critical for the steam release.";
-      if (t.includes("dal")) return "Dal Makhani slow-cook needs at least 30 minutes on lowest flame after the base is ready. The longer the better — up to 2 hours for restaurant quality.";
-      return "Use the plus button to add a new timer. You can track multiple dishes simultaneously. I'll highlight any timer under 2 minutes.";
+      const daily   = suppliers.filter((s: any) => s.delivery === "Daily");
+      if (t.includes("deliver") || t.includes("today") || t.includes("coming")) {
+        return daily.length > 0
+          ? `Daily deliveries: ${daily.map((s: any) => s.name).join(", ")}. ${pending.length} orders currently in transit.`
+          : "No daily deliveries. Check individual supplier schedules.";
+      }
+      if (t.includes("order") || t.includes("pending") || t.includes("transit")) {
+        return pending.length > 0
+          ? `${pending.length} pending order${pending.length > 1 ? "s" : ""}: ${pending.map((s: any) => s.name).join(", ")}.`
+          : "No pending orders. All deliveries are up to date.";
+      }
+      if (t.includes("rating") || t.includes("best") || t.includes("reliable")) {
+        const top = [...suppliers].sort((a: any, b: any) => b.rating - a.rating).slice(0, 2);
+        return `Top rated suppliers: ${top.map((s: any) => `${s.name} at ${s.rating}★`).join(", ")}.`;
+      }
+      const sup = suppliers.find((s: any) => s.name.toLowerCase().split(" ").some((w: string) => t.includes(w) && w.length > 3));
+      if (sup) return `${sup.name}: ${sup.cat}, delivers ${sup.delivery}, rated ${sup.rating}★. Last order: ${sup.lastOrder}.`;
+      return `${suppliers.length} active suppliers. ${pending.length} pending orders. Next daily delivery from: ${daily[0]?.name || "none scheduled"}.`;
     }
   }
 
-  // Fallback to curated lines
   const lines = VOICE_LINES[screen] || VOICE_LINES["dashboard"];
   return lines[Math.floor(Math.random() * lines.length)].ai;
 }
 
 export function VoiceProvider({ children }: { children: ReactNode }) {
-  const [state, setState]   = useState<VoiceCtx["state"]>("idle");
-  const [text, setText]     = useState("");
-  const [history, setHist]  = useState<VoiceEntry[]>([]);
-  const [screen, setScreen] = useState("dashboard");
+  const [state, setState]     = useState<VoiceCtx["state"]>("idle");
+  const [text, setText]       = useState("");
+  const [history, setHist]    = useState<VoiceEntry[]>([]);
+  const [screen, setScreen]   = useState("dashboard");
   const [supported, setSupported] = useState(false);
-  const recogRef = useRef<any>(null);
-  const timers   = useRef<ReturnType<typeof setTimeout>[]>([]);
-  const synthRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const recogRef   = useRef<any>(null);
+  const wakeRef    = useRef<any>(null);
+  const timers     = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const stateRef   = useRef(state);
+  useEffect(() => { stateRef.current = state; }, [state]);
+  const screenRef  = useRef(screen);
+  useEffect(() => { screenRef.current = screen; }, [screen]);
 
   useEffect(() => {
     const SR = typeof window !== "undefined"
@@ -136,33 +228,48 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     setState("speaking");
     setText(response);
 
-    if (typeof window !== "undefined" && window.speechSynthesis) {
-      window.speechSynthesis.cancel();
+    if (typeof window === "undefined" || !window.speechSynthesis) {
+      const t = setTimeout(() => { setState("idle"); setText(""); }, 7000);
+      timers.current.push(t);
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+
+    const doSpeak = () => {
       const utt = new SpeechSynthesisUtterance(response);
       utt.lang = "en-IN";
-      utt.rate = 0.92;
+      utt.rate = 0.9;
       utt.pitch = 1.05;
       const voices = window.speechSynthesis.getVoices();
       const preferred = voices.find(v => v.lang === "en-IN") || voices.find(v => v.lang.startsWith("en"));
       if (preferred) utt.voice = preferred;
-      synthRef.current = utt;
-      utt.onend = () => { setState("idle"); setText(""); };
-      utt.onerror = () => {
-        const t = setTimeout(() => { setState("idle"); setText(""); }, 8000);
-        timers.current.push(t);
-      };
+      utt.onend  = () => { setState("idle"); setText(""); };
+      utt.onerror = () => { const t = setTimeout(() => { setState("idle"); setText(""); }, 7000); timers.current.push(t); };
       window.speechSynthesis.speak(utt);
-      // Chrome bug: synthesis sometimes stalls — nudge it
-      const nudge = setTimeout(() => window.speechSynthesis.resume?.(), 100);
-      timers.current.push(nudge);
+      // Chrome mobile stall workaround
+      const nudge = setInterval(() => window.speechSynthesis.resume?.(), 10000);
+      utt.onend = () => { clearInterval(nudge); setState("idle"); setText(""); };
+      timers.current.push(nudge as unknown as ReturnType<typeof setTimeout>);
+    };
+
+    const voices = window.speechSynthesis.getVoices();
+    if (voices.length > 0) {
+      doSpeak();
     } else {
-      const t = setTimeout(() => { setState("idle"); setText(""); }, 6000);
+      // Voices not loaded yet — wait for them
+      window.speechSynthesis.onvoiceschanged = () => {
+        window.speechSynthesis.onvoiceschanged = null;
+        doSpeak();
+      };
+      // Fallback if onvoiceschanged never fires
+      const t = setTimeout(doSpeak, 500);
       timers.current.push(t);
     }
   }, []);
 
-  const simulateFallback = useCallback((currentScreen: string) => {
-    const lines = VOICE_LINES[currentScreen] || VOICE_LINES["dashboard"];
+  const simulateFallback = useCallback((scr: string) => {
+    const lines = VOICE_LINES[scr] || VOICE_LINES["dashboard"];
     const line  = lines[Math.floor(Math.random() * lines.length)];
     setState("listening");
     setText("");
@@ -172,14 +279,22 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   }, [speak]);
 
   const trigger = useCallback(() => {
-    if (state !== "idle") { stopAll(); setState("idle"); setText(""); return; }
+    if (stateRef.current !== "idle") {
+      stopAll();
+      setState("idle");
+      setText("");
+      return;
+    }
     timers.current.forEach(clearTimeout);
+
+    // Stop wake word while interactive session runs
+    if (wakeRef.current) { try { wakeRef.current.stop(); } catch {} wakeRef.current = null; }
 
     const SR = typeof window !== "undefined"
       ? ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition)
       : null;
 
-    if (!SR) { simulateFallback(screen); return; }
+    if (!SR) { simulateFallback(screenRef.current); return; }
 
     setState("listening");
     setText("");
@@ -189,7 +304,6 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     recog.lang = "en-IN";
     recog.interimResults = true;
     recog.maxAlternatives = 1;
-    recog.continuous = false;
 
     recog.onresult = (e: any) => {
       const partial = Array.from(e.results).map((r: any) => r[0].transcript).join("");
@@ -198,26 +312,76 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
         recog.stop();
         setState("processing");
         const t = setTimeout(() => {
-          const response = smartResponse(partial, screen);
+          const response = smartResponse(partial, screenRef.current);
           speak(response, partial);
-        }, 500);
+        }, 400);
         timers.current.push(t);
       }
     };
 
-    recog.onspeechend = () => recog.stop();
+    recog.onspeechend = () => { try { recog.stop(); } catch {} };
     recog.onerror = (e: any) => {
       if (e.error === "no-speech") { setState("idle"); setText(""); return; }
-      simulateFallback(screen);
+      simulateFallback(screenRef.current);
     };
-    recog.onend = () => {
-      setState(s => s === "listening" ? "idle" : s);
-      setText(t => t === "" ? "" : t);
+    recog.onend = () => { setState(s => s === "listening" ? "idle" : s); };
+
+    try { recog.start(); } catch { simulateFallback(screenRef.current); }
+  }, [stopAll, speak, simulateFallback]);
+
+  // ── Wake word listener ────────────────────────────────────────
+  useEffect(() => {
+    if (!supported || stateRef.current !== "idle") return;
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) return;
+
+    let cancelled = false;
+    let restartTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const start = () => {
+      if (cancelled || stateRef.current !== "idle") return;
+      try {
+        const wr = new SR();
+        wakeRef.current = wr;
+        wr.lang = "en-IN";
+        wr.continuous = true;
+        wr.interimResults = true;
+        wr.maxAlternatives = 1;
+
+        wr.onresult = (e: any) => {
+          for (let i = e.resultIndex; i < e.results.length; i++) {
+            const t = e.results[i][0].transcript.toLowerCase();
+            if (t.includes("rasoi") || t.includes("hey")) {
+              cancelled = true;
+              wakeRef.current = null;
+              try { wr.stop(); } catch {}
+              trigger();
+              return;
+            }
+          }
+        };
+        wr.onerror = (e: any) => {
+          if (e.error === "not-allowed" || e.error === "service-not-allowed") cancelled = true;
+        };
+        wr.onend = () => {
+          wakeRef.current = null;
+          if (!cancelled) restartTimer = setTimeout(start, 1500);
+        };
+        wr.start();
+      } catch { cancelled = true; }
     };
 
-    try { recog.start(); } catch { simulateFallback(screen); }
-  }, [state, screen, stopAll, speak, simulateFallback]);
+    // Small delay before starting wake word (let page load)
+    restartTimer = setTimeout(start, 2000);
 
+    return () => {
+      cancelled = true;
+      if (restartTimer) clearTimeout(restartTimer);
+      if (wakeRef.current) { try { wakeRef.current.stop(); } catch {} wakeRef.current = null; }
+    };
+  }, [supported, state, trigger]);
+
+  // ── Space key shortcut ────────────────────────────────────────
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName;

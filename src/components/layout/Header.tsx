@@ -87,7 +87,7 @@ export default function Header({ onMenuClick, isMobile }: { onMenuClick?: () => 
 
       {/* Mobile: show voice text below mic if active */}
       {isMobile && isActive && text && (
-        <div style={{ position: "absolute", top: 62, left: 0, right: 0, background: "oklch(19% 0.04 55)", borderBottom: "1px solid oklch(78% 0.18 80 / 0.25)", padding: "10px 16px", zIndex: 30, animation: "fadeIn 0.2s ease" }}>
+        <div style={{ position: "fixed", top: 62, left: 0, right: 0, background: "oklch(19% 0.04 55)", borderBottom: "1px solid oklch(78% 0.18 80 / 0.25)", padding: "10px 16px", zIndex: 30, animation: "fadeIn 0.2s ease" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
             <div className={`voice-dot ${state === "listening" ? "dot-pulse" : ""}`} />
             <span style={{ fontSize: 11, color: "oklch(78% 0.18 80)", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600 }}>
