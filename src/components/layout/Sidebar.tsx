@@ -14,7 +14,7 @@ const NAV = [
   { id: "suppliers",  label: "Suppliers",     hindi: "आपूर्तिकर्ता",      icon: "supplier",  href: "/app/suppliers"  },
 ];
 
-export default function Sidebar({ showHindi = true }: { showHindi?: boolean }) {
+export default function Sidebar({ onClose }: { onClose?: () => void }) {
   const pathname = usePathname();
 
   return (
@@ -25,7 +25,7 @@ export default function Sidebar({ showHindi = true }: { showHindi?: boolean }) {
       display: "flex", flexDirection: "column",
       overflow: "hidden",
     }}>
-      <div style={{ padding: "24px 20px 20px", borderBottom: "1px solid oklch(26% 0.04 55)" }}>
+      <div style={{ padding: "20px 20px 16px", borderBottom: "1px solid oklch(26% 0.04 55)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{ width: 36, height: 36, borderRadius: 10, background: "oklch(78% 0.18 80)", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <span style={{ fontSize: 18 }}>🍲</span>
@@ -35,13 +35,20 @@ export default function Sidebar({ showHindi = true }: { showHindi?: boolean }) {
             <div style={{ fontSize: 10, color: "oklch(50% 0.03 70)", letterSpacing: "0.12em", marginTop: 2 }}>AI KITCHEN</div>
           </div>
         </div>
+        {onClose && (
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "oklch(50% 0.03 70)", padding: 4, display: "flex" }}>
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <path d="M2 2l14 14M16 2L2 16"/>
+            </svg>
+          </button>
+        )}
       </div>
 
       <nav style={{ flex: 1, padding: "12px 10px", overflowY: "auto" }}>
         {NAV.map(n => {
           const on = pathname === n.href || pathname.startsWith(n.href + "/");
           return (
-            <Link key={n.id} href={n.href} style={{ textDecoration: "none", display: "block" }}>
+            <Link key={n.id} href={n.href} onClick={onClose} style={{ textDecoration: "none", display: "block" }}>
               <div className="nav-item" style={{
                 display: "flex", alignItems: "center", gap: 11,
                 padding: "10px 12px", borderRadius: 10, marginBottom: 2,
@@ -53,7 +60,7 @@ export default function Sidebar({ showHindi = true }: { showHindi?: boolean }) {
                 <Icon name={n.icon} size={16} color="currentColor" />
                 <div>
                   <div style={{ fontSize: 13, fontWeight: on ? 600 : 400, lineHeight: 1.2 }}>{n.label}</div>
-                  {showHindi && <div style={{ fontSize: 10, opacity: 0.55, marginTop: 1 }}>{n.hindi}</div>}
+                  <div style={{ fontSize: 10, opacity: 0.55, marginTop: 1 }}>{n.hindi}</div>
                 </div>
               </div>
             </Link>

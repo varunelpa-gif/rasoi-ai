@@ -2,53 +2,60 @@
 import { useVoice } from "@/context/VoiceContext";
 import { Card, Badge, StatCard } from "@/components/ui/primitives";
 import Icon from "@/components/ui/Icon";
+import { useStock, useMenu, useStaff } from "@/lib/useLocalData";
 
 const specials = [
-  { name: "Dal Makhani",         hindi: "दाल मखनी",      cat: "Main Course",  margin: "75%", allergens: ["dairy"],    status: "prepping" },
-  { name: "Palak Paneer",        hindi: "पालक पनीर",     cat: "Vegetarian",   margin: "69%", allergens: ["dairy"],    status: "ready"    },
-  { name: "Malabar Prawn Curry", hindi: "मालाबार झींगा", cat: "Seafood",      margin: "65%", allergens: ["shellfish"],status: "prepping" },
-  { name: "Rogan Josh",          hindi: "रोगन जोश",      cat: "Main Course",  margin: "71%", allergens: [],           status: "ready"    },
-];
-
-const alerts = [
-  { type: "ruby",       icon: "alert",    text: "Kashmiri chilli critically low — 200g remaining" },
-  { type: "terracotta", icon: "timer",    text: "Dal Makhani dum: 8 min remaining" },
-  { type: "saffron",    icon: "supplier", text: "Sharma Spice Co. delivery scheduled for Tuesday" },
+  { name: "Dal Makhani",         hindi: "दाल मखनी",      cat: "Main Course",  margin: "75%", allergens: ["dairy"],     status: "prepping" },
+  { name: "Palak Paneer",        hindi: "पालक पनीर",     cat: "Vegetarian",   margin: "69%", allergens: ["dairy"],     status: "ready"    },
+  { name: "Malabar Prawn Curry", hindi: "मालाबार झींगा", cat: "Seafood",      margin: "65%", allergens: ["shellfish"], status: "prepping" },
+  { name: "Rogan Josh",          hindi: "रोगन जोश",      cat: "Main Course",  margin: "71%", allergens: [],            status: "ready"    },
 ];
 
 const BADGE_TEXT: Record<string, string> = {
-  ruby:       "oklch(65% 0.18 20)",
-  terracotta: "oklch(68% 0.16 40)",
-  saffron:    "oklch(78% 0.18 80)",
+  ruby: "oklch(65% 0.18 20)", terracotta: "oklch(68% 0.16 40)", saffron: "oklch(78% 0.18 80)",
 };
 
 export default function DashboardPage() {
   const { history, trigger } = useVoice();
+  const { items: stock }    = useStock();
+  const { items: menu }     = useMenu();
+  const { members: staff }  = useStaff();
+
+  const lowCount  = stock.filter(i => (i.stock / i.max) * 100 <= 45).length;
+  const day       = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][new Date().getDay()];
+  const onDuty    = staff.filter(s => s.shifts.includes(day)).length;
+  const topDish   = [...menu].sort((a, b) => b.margin - a.margin)[0];
+
+  const alerts = [
+    ...(lowCount > 0 ? [{ type: "ruby",    icon: "alert",    text: `${lowCount} stock item${lowCount > 1 ? "s" : ""} critically low — check inventory` }] : []),
+    { type: "terracotta", icon: "timer",    text: "Dal Makhani dum: 8 min remaining" },
+    { type: "saffron",    icon: "supplier", text: "Sharma Spice Co. delivery scheduled for Tuesday" },
+  ];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14 }}>
-        <StatCard label="Active Recipes"  value="3"  sub="in prep tonight"  color="saffron"    />
-        <StatCard label="Timers Running"  value="4"  sub="2 need attention" color="terracotta" />
-        <StatCard label="Low Stock"        value="3"  sub="items critical"   color="ruby"       />
-        <StatCard label="Staff on Shift"  value="12" sub="2 on leave"       color="mint"       />
+      <div className="grid-stats">
+        <StatCard label="Total Recipes"   value="3"  sub="in rotation"       color="saffron"    />
+        <StatCard label="Low Stock"       value={String(lowCount)} sub="items need reorder" color="ruby" />
+        <StatCard label="Staff on Shift"  value={String(onDuty)}  sub={`working today (${day})`} color="mint" />
+        <StatCard label="Top Margin"      value={topDish ? `${topDish.margin}%` : "–"} sub={topDish?.name || "no data"} color="terracotta" />
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1.1fr 0.9fr", gap: 18 }}>
+      <div className="grid-2col">
         <Card>
           <div style={{ fontFamily: "var(--ff-head)", fontSize: 16, marginBottom: 14 }}>
             Aaj Ka Menu <span style={{ fontSize: 12, color: "oklch(52% 0.03 70)", fontFamily: "var(--ff-body)", fontWeight: 400 }}>— Tonight&apos;s Specials</span>
           </div>
           {specials.map((d, i) => (
             <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 0", borderBottom: i < specials.length - 1 ? "1px solid oklch(27% 0.04 55)" : "none" }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 500, fontSize: 14 }}>{d.name}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 500, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.name}</div>
                 <div style={{ fontSize: 11, color: "oklch(50% 0.03 70)", marginTop: 1 }}>{d.hindi} · {d.cat}</div>
                 <div style={{ display: "flex", gap: 4, marginTop: 5, flexWrap: "wrap" }}>
                   {d.allergens.map(a => <Badge key={a} color="ruby">{a}</Badge>)}
                 </div>
               </div>
-              <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 5 }}>
+              <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 5, flexShrink: 0 }}>
                 <span style={{ fontSize: 14, fontWeight: 700, color: "oklch(72% 0.14 155)" }}>{d.margin}</span>
                 <Badge color={d.status === "ready" ? "mint" : "saffron"}>{d.status}</Badge>
               </div>
@@ -76,7 +83,7 @@ export default function DashboardPage() {
             {history.length === 0 ? (
               <div style={{ textAlign: "center", padding: "20px 0" }}>
                 <div style={{ fontSize: 28, marginBottom: 8 }}>🎙️</div>
-                <div style={{ fontSize: 13, color: "oklch(50% 0.03 70)" }}>Say &quot;Hey Rasoi&quot; to begin</div>
+                <div style={{ fontSize: 13, color: "oklch(50% 0.03 70)" }}>Tap mic or press Space to talk</div>
                 <button onClick={trigger} style={{ marginTop: 12, padding: "7px 18px", background: "oklch(78% 0.18 80 / 0.12)", border: "1px solid oklch(78% 0.18 80 / 0.4)", borderRadius: 20, color: "oklch(78% 0.18 80)", cursor: "pointer", fontSize: 12 }}>
                   Try it now
                 </button>

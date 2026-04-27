@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { useVoice } from "@/context/VoiceContext";
 import { Card, Badge, Btn } from "@/components/ui/primitives";
-import { STAFF } from "@/lib/data";
+import { useStaff } from "@/lib/useLocalData";
 
 const DAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
 const STATION_COLOR: Record<string, string> = {
@@ -12,6 +12,7 @@ const STATION_COLOR: Record<string, string> = {
 
 export default function StaffPage() {
   const { trigger } = useVoice();
+  const { members: STAFF } = useStaff();
   const [day, setDay] = useState("Mon");
   const today = STAFF.filter(s => s.shifts.includes(day));
 
@@ -23,7 +24,7 @@ export default function StaffPage() {
         ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+      <div className="grid-2" style={{ gap: 20 }}>
         <div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
             <div style={{ fontFamily: "var(--ff-head)", fontSize: 18 }}>{day}&apos;s Kitchen Team</div>

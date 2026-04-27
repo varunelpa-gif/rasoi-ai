@@ -2,19 +2,20 @@
 import { useState } from "react";
 import { useVoice } from "@/context/VoiceContext";
 import { Card, Btn } from "@/components/ui/primitives";
-import { MENU_ITEMS } from "@/lib/data";
+import { useMenu } from "@/lib/useLocalData";
 
 export default function MenuPage() {
   const { trigger } = useVoice();
+  const { items: MENU_ITEMS } = useMenu();
   const [sortBy, setSortBy] = useState<"margin"|"sales"|"price"|"cost">("margin");
   const sorted = [...MENU_ITEMS].sort((a, b) => b[sortBy] - a[sortBy]);
   const revenue = MENU_ITEMS.reduce((s, d) => s + d.price * d.sales, 0);
-  const avgMargin = (MENU_ITEMS.reduce((s, d) => s + d.margin, 0) / MENU_ITEMS.length).toFixed(1);
+  const avgMargin = MENU_ITEMS.length ? (MENU_ITEMS.reduce((s, d) => s + d.margin, 0) / MENU_ITEMS.length).toFixed(1) : "0";
   const topDish = [...MENU_ITEMS].sort((a, b) => b.margin - a.margin)[0];
 
   return (
     <div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14, marginBottom: 22 }}>
+      <div className="grid-cards" style={{ marginBottom: 22 }}>
         <Card>
           <div style={{ fontSize: 11, color: "oklch(50% 0.03 70)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 6 }}>Monthly Revenue</div>
           <div style={{ fontFamily: "var(--ff-head)", fontSize: 30, color: "oklch(72% 0.14 155)", fontWeight: 700 }}>₹{revenue.toLocaleString("en-IN")}</div>
@@ -25,8 +26,8 @@ export default function MenuPage() {
         </Card>
         <Card>
           <div style={{ fontSize: 11, color: "oklch(50% 0.03 70)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 6 }}>Star Dish</div>
-          <div style={{ fontFamily: "var(--ff-head)", fontSize: 18, fontWeight: 700, marginTop: 4 }}>{topDish.name}</div>
-          <div style={{ fontSize: 12, color: "oklch(72% 0.14 155)", marginTop: 2 }}>{topDish.margin}% margin</div>
+          <div style={{ fontFamily: "var(--ff-head)", fontSize: 18, fontWeight: 700, marginTop: 4 }}>{topDish?.name ?? "–"}</div>
+          <div style={{ fontSize: 12, color: "oklch(72% 0.14 155)", marginTop: 2 }}>{topDish?.margin ?? 0}% margin</div>
         </Card>
       </div>
 

@@ -1,7 +1,7 @@
 "use client";
 import { useState, CSSProperties } from "react";
 import { useRouter } from "next/navigation";
-import { signIn } from "next-auth/react";
+
 
 // ── Spice Art SVG ─────────────────────────────────────────────
 function SpiceArt() {
@@ -120,24 +120,14 @@ function AuthPanel({ onSuccess }: { onSuccess: (user: { name: string; email: str
     return Object.keys(e).length === 0;
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = () => {
     if (!validate()) return;
     setLoading(true);
-    try {
-      const result = await signIn("credentials", {
-        email, password, name: name || email.split("@")[0],
-        redirect: false,
-      });
-      if (result?.error) {
-        setErrors({ email: "Invalid email or password" });
-        setLoading(false);
-      } else {
-        onSuccess({ name: name || email.split("@")[0], email, restaurant });
-      }
-    } catch {
-      setLoading(false);
-      setErrors({ email: "Something went wrong. Try again." });
-    }
+    setTimeout(() => {
+      const userData = { name: name || email.split("@")[0], email, restaurant };
+      if (typeof window !== "undefined") localStorage.setItem("rasoi_user", JSON.stringify(userData));
+      onSuccess(userData);
+    }, 800);
   };
 
   const handleGoogle = () => {
@@ -335,7 +325,7 @@ export default function SignInPage() {
 
   if (view === "auth") return (
     <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
-      <div style={{ width: "45%", background: "oklch(15% 0.04 50)", borderRight: "1px solid oklch(24% 0.04 55)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px 32px", position: "relative", overflow: "hidden" }}>
+      <div className="hide-mobile" style={{ width: "45%", background: "oklch(15% 0.04 50)", borderRight: "1px solid oklch(24% 0.04 55)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px 32px", position: "relative", overflow: "hidden" }}>
         <div style={{ position: "absolute", inset: 0, backgroundImage: "radial-gradient(circle at 30% 20%, oklch(78% 0.18 80 / 0.05) 0%, transparent 60%), radial-gradient(circle at 70% 80%, oklch(62% 0.16 40 / 0.06) 0%, transparent 60%)" }}/>
         <div style={{ position: "relative", zIndex: 1, textAlign: "center", width: "100%" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 8 }}>
