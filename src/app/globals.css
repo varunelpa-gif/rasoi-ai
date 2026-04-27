@@ -1,0 +1,80 @@
+:root {
+  --bg:         oklch(13% 0.03 55);
+  --surface:    oklch(19% 0.04 55);
+  --surface-2:  oklch(24% 0.04 55);
+  --border:     oklch(27% 0.04 55);
+  --text:       oklch(93% 0.015 80);
+  --muted:      oklch(55% 0.03 70);
+  --saffron:    oklch(78% 0.18 80);
+  --terracotta: oklch(62% 0.16 40);
+  --mint:       oklch(72% 0.14 155);
+  --ruby:       oklch(65% 0.18 20);
+  --ff-head:    'Playfair Display', serif;
+  --ff-body:    'DM Sans', sans-serif;
+}
+
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body { height: 100%; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--ff-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: oklch(32% 0.04 55); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: oklch(42% 0.04 55); }
+
+input { outline: none; font-family: var(--ff-body); }
+input:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0 40px oklch(22% 0.04 55) inset !important;
+  -webkit-text-fill-color: oklch(93% 0.015 80) !important;
+}
+button { font-family: var(--ff-body); }
+a { color: inherit; text-decoration: none; }
+
+@keyframes fadeUp   { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+@keyframes fadeIn   { from { opacity: 0; } to { opacity: 1; } }
+@keyframes pulse    { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+@keyframes float    { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+@keyframes spin     { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes orb-expand { 0% { opacity: 0.7; transform: scale(0.85); } 100% { opacity: 0; transform: scale(1.15); } }
+@keyframes dot-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.7); } }
+
+.orb-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1.5px solid oklch(78% 0.18 80 / 0.35);
+  animation: orb-expand 2s ease-out infinite;
+  pointer-events: none;
+}
+.orb-ring-1 { inset: -8px;  animation-delay: 0s; }
+.orb-ring-2 { inset: -16px; animation-delay: 0.65s; }
+
+.nav-item:hover {
+  background: oklch(78% 0.18 80 / 0.07) !important;
+  color: oklch(80% 0.02 80) !important;
+}
+
+.voice-panel {
+  background: oklch(19% 0.04 55);
+  border: 1px solid oklch(78% 0.18 80 / 0.3);
+  border-radius: 12px;
+  padding: 10px 16px;
+  max-width: 440px;
+  min-width: 200px;
+  animation: fadeIn 0.25s ease;
+}
+
+.voice-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: oklch(78% 0.18 80);
+  flex-shrink: 0;
+}
+.dot-pulse { animation: dot-pulse 1s ease-in-out infinite; }
