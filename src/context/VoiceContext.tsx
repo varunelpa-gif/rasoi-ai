@@ -17,6 +17,8 @@ interface VoiceCtx {
   history: VoiceEntry[];
   trigger: () => void;
   speakText: (text: string, label?: string) => void;
+  speakQueue: (items: { text: string; label: string }[], onStep?: (i: number) => void) => () => void;
+  ask: (question: string) => void;
   screen: string;
   setScreen: (s: string) => void;
   recipeContext: RecipeCtx | null;
@@ -26,7 +28,7 @@ interface VoiceCtx {
 
 const Ctx = createContext<VoiceCtx>({
   state: "idle", text: "", history: [],
-  trigger: () => {}, speakText: () => {},
+  trigger: () => {}, speakText: () => {}, speakQueue: () => () => {}, ask: () => {},
   screen: "dashboard", setScreen: () => {},
   recipeContext: null, setRecipeContext: () => {},
   supported: false,
@@ -289,14 +291,14 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     if (typeof window !== "undefined" && window.speechSynthesis) window.speechSynthesis.cancel();
   }, []);
 
-  const doSpeak = useCallback((response: string, label: string) => {
+  const doSpeak = useCallback((response: string, label: string, onDone?: () => void) => {
     const ts = new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
     setHist(prev => [{ user: label, ai: response, time: ts }, ...prev.slice(0, 11)]);
     setState("speaking");
     setText(response);
 
     if (typeof window === "undefined" || !window.speechSynthesis) {
-      const t = setTimeout(() => { setState("idle"); setText(""); }, 7000);
+      const t = setTimeout(() => { setState("idle"); setText(""); onDone?.(); }, 7000);
       timers.current.push(t);
       return;
     }
@@ -313,8 +315,16 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       if (preferred) utt.voice = preferred;
       const nudge = setInterval(() => window.speechSynthesis.resume?.(), 10000);
       timers.current.push(nudge as unknown as ReturnType<typeof setTimeout>);
-      utt.onend = () => { clearInterval(nudge); setState("idle"); setText(""); };
-      utt.onerror = () => { clearInterval(nudge); const t = setTimeout(() => { setState("idle"); setText(""); }, 7000); timers.current.push(t); };
+      utt.onend = () => {
+        clearInterval(nudge);
+        if (onDone) { onDone(); }
+        else { setState("idle"); setText(""); }
+      };
+      utt.onerror = () => {
+        clearInterval(nudge);
+        if (onDone) { onDone(); }
+        else { const t = setTimeout(() => { setState("idle"); setText(""); }, 7000); timers.current.push(t); }
+      };
       window.speechSynthesis.speak(utt);
     };
 
@@ -335,6 +345,41 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   const speakText = useCallback((text: string, label = "▶ Voice guide") => {
     stopAll();
     doSpeak(text, label);
+  }, [stopAll, doSpeak]);
+
+  // Public: read a queue of items sequentially, calling onStep(i) before each
+  const speakQueue = useCallback((
+    items: { text: string; label: string }[],
+    onStep?: (i: number) => void
+  ): () => void => {
+    stopAll();
+    let stopped = false;
+
+    const playNext = (i: number) => {
+      if (stopped || i >= items.length) { setState("idle"); setText(""); return; }
+      onStep?.(i);
+      doSpeak(items[i].text, items[i].label, () => {
+        if (!stopped) {
+          const t = setTimeout(() => playNext(i + 1), 700);
+          timers.current.push(t);
+        }
+      });
+    };
+
+    playNext(0);
+    return () => { stopped = true; stopAll(); setState("idle"); setText(""); };
+  }, [stopAll, doSpeak]);
+
+  // Public: ask a pre-built question (speaks answer immediately without mic)
+  const ask = useCallback((question: string) => {
+    stopAll();
+    setState("processing");
+    setText(question);
+    const t = setTimeout(() => {
+      const response = smartResponse(question, screenRef.current, recipeCtxRef.current);
+      doSpeak(response, question);
+    }, 300);
+    timers.current.push(t);
   }, [stopAll, doSpeak]);
 
   const simulateFallback = useCallback((scr: string) => {
@@ -462,7 +507,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   useEffect(() => () => stopAll(), [stopAll]);
 
   return (
-    <Ctx.Provider value={{ state, text, history, trigger, speakText, screen, setScreen, recipeContext, setRecipeContext, supported }}>
+    <Ctx.Provider value={{ state, text, history, trigger, speakText, speakQueue, ask, screen, setScreen, recipeContext, setRecipeContext, supported }}>
       {children}
     </Ctx.Provider>
   );

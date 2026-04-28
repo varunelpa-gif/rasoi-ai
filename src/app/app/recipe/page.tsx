@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useVoice } from "@/context/VoiceContext";
 import { Card, Badge, Btn, SectionTitle } from "@/components/ui/primitives";
 import DishSVG from "@/components/illustrations/DishSVG";
@@ -7,7 +7,9 @@ import { RECIPES, Recipe } from "@/lib/data";
 
 function RecipeDetail({ r, onBack }: { r: Recipe; onBack: () => void }) {
   const [step, setStep] = useState(0);
-  const { trigger, speakText, setRecipeContext } = useVoice();
+  const { state, trigger, speakText, speakQueue, setRecipeContext } = useVoice();
+  const stopQueueRef = useRef<(() => void) | null>(null);
+  const isPlaying = state === "speaking" && stopQueueRef.current !== null;
 
   // Keep VoiceContext in sync with current step
   useEffect(() => {
@@ -20,17 +22,46 @@ function RecipeDetail({ r, onBack }: { r: Recipe; onBack: () => void }) {
     return () => setRecipeContext(null);
   }, [step, r, setRecipeContext]);
 
-  function goNext() { setStep(s => Math.min(r.steps.length - 1, s + 1)); }
-  function goPrev() { setStep(s => Math.max(0, s - 1)); }
+  // Clean up queue on unmount
+  useEffect(() => {
+    return () => { stopQueueRef.current?.(); stopQueueRef.current = null; };
+  }, []);
 
   function readStep(idx: number) {
+    stopQueueRef.current?.();
+    stopQueueRef.current = null;
     speakText(`Step ${idx + 1}. ${r.steps[idx].text}`, `Step ${idx + 1}`);
+  }
+
+  const readAllFromStep = useCallback((startStep: number) => {
+    const items = r.steps.slice(startStep).map((s, i) => ({
+      text: `Step ${startStep + i + 1}. ${s.text}`,
+      label: `Step ${startStep + i + 1}`,
+    }));
+    const stop = speakQueue(items, (queueIndex) => {
+      setStep(startStep + queueIndex);
+    });
+    stopQueueRef.current = stop;
+  }, [r, speakQueue]);
+
+  function stopPlayback() {
+    stopQueueRef.current?.();
+    stopQueueRef.current = null;
+  }
+
+  function goNext() {
+    stopPlayback();
+    setStep(s => Math.min(r.steps.length - 1, s + 1));
+  }
+  function goPrev() {
+    stopPlayback();
+    setStep(s => Math.max(0, s - 1));
   }
 
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 22 }}>
-        <Btn onClick={onBack} variant="ghost" style={{ padding: "7px 14px" }}>← Back</Btn>
+        <Btn onClick={() => { stopPlayback(); onBack(); }} variant="ghost" style={{ padding: "7px 14px" }}>← Back</Btn>
         <div style={{ flex: 1 }}>
           <div style={{ fontFamily: "var(--ff-head)", fontSize: 22 }}>{r.name}</div>
           <div style={{ fontSize: 13, color: "oklch(52% 0.03 70)" }}>{r.hindi} · {r.time} · Serves {r.serves} · <span style={{ color: "oklch(72% 0.14 155)" }}>Margin {r.margin}</span></div>
@@ -62,14 +93,19 @@ function RecipeDetail({ r, onBack }: { r: Recipe; onBack: () => void }) {
 
         <div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-            <SectionTitle sub="Tap step or use buttons below">Steps / विधि</SectionTitle>
-            <Badge color="saffron">Step {step + 1} / {r.steps.length}</Badge>
+            <SectionTitle sub="Tap any step or use buttons below">Steps / विधि</SectionTitle>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              {isPlaying && (
+                <span style={{ fontSize: 11, color: "oklch(78% 0.18 80)", animation: "dot-pulse 1s infinite" }}>● Auto-reading</span>
+              )}
+              <Badge color="saffron">Step {step + 1} / {r.steps.length}</Badge>
+            </div>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {r.steps.map((s, i) => {
               const isCur = i === step, isDone = i < step;
               return (
-                <div key={i} onClick={() => setStep(i)} style={{
+                <div key={i} onClick={() => { stopPlayback(); setStep(i); }} style={{
                   display: "flex", gap: 14, padding: "14px 16px",
                   borderRadius: 12, cursor: "pointer",
                   background: isCur ? "oklch(78% 0.18 80 / 0.08)" : "oklch(19% 0.04 55)",
@@ -91,14 +127,21 @@ function RecipeDetail({ r, onBack }: { r: Recipe; onBack: () => void }) {
             })}
           </div>
 
-          {/* Navigation + voice */}
-          <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
-            <Btn onClick={goPrev} variant="ghost" style={{ flex: 1 }} disabled={step === 0}>← Prev</Btn>
-            <Btn onClick={() => readStep(step)} variant="voice" style={{ flex: 1 }}>🎙️ Read step</Btn>
-            <Btn onClick={goNext} variant="primary" style={{ flex: 1 }} disabled={step === r.steps.length - 1}>Next →</Btn>
+          {/* Main controls */}
+          <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+            <Btn onClick={goPrev} variant="ghost" style={{ flex: 1 }}>← Prev</Btn>
+            {isPlaying ? (
+              <Btn onClick={stopPlayback} style={{ flex: 1, background: "oklch(55% 0.18 20)", border: "none" }}>⏹ Stop</Btn>
+            ) : (
+              <Btn onClick={() => readAllFromStep(step)} variant="voice" style={{ flex: 1 }}>▶ Read all steps</Btn>
+            )}
+            <Btn onClick={goNext} variant="primary" style={{ flex: 1 }}>Next →</Btn>
           </div>
-          <div style={{ marginTop: 10 }}>
-            <Btn onClick={trigger} variant="ghost" style={{ width: "100%", fontSize: 12 }}>🎙️ Ask Rasoi AI — "next step", "ingredients", "substitute for cream"…</Btn>
+
+          {/* Secondary controls */}
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <Btn onClick={() => readStep(step)} variant="ghost" style={{ flex: 1, fontSize: 12 }}>🎙️ Read this step</Btn>
+            <Btn onClick={trigger} variant="ghost" style={{ flex: 1, fontSize: 12 }}>🎙️ Ask Rasoi…</Btn>
           </div>
         </div>
       </div>

@@ -68,7 +68,7 @@ function Modal({ item, onSave, onClose }: {
 }
 
 export default function InventoryPage() {
-  const { trigger }              = useVoice();
+  const { trigger, ask }         = useVoice();
   const { items, update, add, remove } = useStock();
   const [cat, setCat]            = useState("All");
   const [modal, setModal]        = useState<Partial<StockItem> | null>(null);
@@ -103,7 +103,8 @@ export default function InventoryPage() {
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           {lowCount > 0 && <Badge color="ruby">{lowCount} low stock</Badge>}
-          <Btn onClick={trigger} variant="voice">🎙️ Ask Rasoi</Btn>
+          <Btn onClick={() => ask("what items are low or need reordering")} variant="voice">🎙️ Stock status</Btn>
+          <Btn onClick={trigger} variant="ghost" style={{ fontSize: 12 }}>🎙️ Ask…</Btn>
           <Btn variant="primary" onClick={openAdd}>+ Add Item</Btn>
         </div>
       </div>
