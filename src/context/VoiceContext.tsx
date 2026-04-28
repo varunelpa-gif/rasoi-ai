@@ -22,6 +22,9 @@ interface VoiceCtx {
   recipeContext:  RecipeCtx | null;
   setRecipeContext:(ctx: RecipeCtx | null) => void;
   supported:      boolean;
+  orbOpen:        boolean;
+  openOrb:        () => void;
+  closeOrb:       () => void;
 }
 
 const Ctx = createContext<VoiceCtx>({
@@ -31,6 +34,7 @@ const Ctx = createContext<VoiceCtx>({
   screen: "dashboard", setScreen: () => {},
   recipeContext: null, setRecipeContext: () => {},
   supported: false,
+  orbOpen: false, openOrb: () => {}, closeOrb: () => {},
 });
 
 // ── Data helpers ──────────────────────────────────────────────
@@ -175,6 +179,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   const [screen,        setScreen]         = useState("dashboard");
   const [recipeContext, setRecipeContext]   = useState<RecipeCtx | null>(null);
   const [supported,     setSupported]      = useState(false);
+  const [orbOpen,       setOrbOpen]        = useState(false);
 
   const wakeRef      = useRef<any>(null);
   const recogRef     = useRef<any>(null);
@@ -185,6 +190,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   const cancelRef    = useRef(false);
   const pauseRef     = useRef(false);
   const resumeRef    = useRef<(() => void) | null>(null);
+  const orbOpenRef   = useRef(false);
 
   useEffect(() => { stateRef.current = state; }, [state]);
   useEffect(() => { screenRef.current = screen; }, [screen]);
@@ -408,6 +414,52 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     setAutoReading(false);
   }, [stopAll]);
 
+  // ── ChatGPT-style continuous orb conversation ──────────────────
+  const closeOrb = useCallback(() => {
+    cancelRef.current = true;
+    orbOpenRef.current = false;
+    stopAll();
+    setOrbOpen(false);
+    setState("idle");
+    setText("");
+    setAutoReading(false);
+  }, [stopAll]);
+
+  const openOrb = useCallback(async () => {
+    if (orbOpenRef.current) { closeOrb(); return; }
+    stopAll();
+    cancelRef.current = false;
+    pauseRef.current  = false;
+    orbOpenRef.current = true;
+    setOrbOpen(true);
+
+    while (orbOpenRef.current && !cancelRef.current) {
+      const heard = await listenOnce(9000);
+      if (!orbOpenRef.current || cancelRef.current) break;
+
+      if (!heard) continue; // timeout — keep listening
+
+      const t = heard.toLowerCase();
+      if (isStop(t) || t.includes("goodbye") || t.includes("bye") || t.includes("close") || t.includes("exit")) {
+        await speakAsync("Goodbye! I'm here whenever you need me.", heard);
+        break;
+      }
+
+      setState("processing"); setText(heard);
+      await new Promise<void>(r => { const tid = setTimeout(r, 300); timers.current.push(tid); });
+      if (!orbOpenRef.current || cancelRef.current) break;
+
+      const answer = smartResponse(heard, screenRef.current, recipeCtxRef.current);
+      await speakAsync(answer, heard);
+    }
+
+    orbOpenRef.current = false;
+    cancelRef.current  = false;
+    setOrbOpen(false);
+    setState("idle");
+    setText("");
+  }, [stopAll, closeOrb, listenOnce, speakAsync]);
+
   // ── Public: immediate TTS ─────────────────────────────────────
   const speakText = useCallback((text: string, label = "Read") => {
     stopAll();
@@ -516,16 +568,16 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName;
-      if (e.code === "Space" && tag !== "INPUT" && tag !== "TEXTAREA") { e.preventDefault(); trigger(); }
+      if (e.code === "Space" && tag !== "INPUT" && tag !== "TEXTAREA") { e.preventDefault(); openOrb(); }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [trigger]);
+  }, [openOrb]);
 
   useEffect(() => () => stopAll(), [stopAll]);
 
   return (
-    <Ctx.Provider value={{ state, autoReading, text, history, trigger, speakText, ask, startAutoRead, stopAutoRead, screen, setScreen, recipeContext, setRecipeContext, supported }}>
+    <Ctx.Provider value={{ state, autoReading, text, history, trigger, speakText, ask, startAutoRead, stopAutoRead, screen, setScreen, recipeContext, setRecipeContext, supported, orbOpen, openOrb, closeOrb }}>
       {children}
     </Ctx.Provider>
   );

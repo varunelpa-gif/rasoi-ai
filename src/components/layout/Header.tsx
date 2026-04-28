@@ -16,8 +16,8 @@ const TITLES: Record<string, string> = {
 
 export default function Header({ onMenuClick, isMobile }: { onMenuClick?: () => void; isMobile?: boolean }) {
   const pathname  = usePathname();
-  const { state, text, trigger } = useVoice();
-  const isActive  = state !== "idle";
+  const { state, text, trigger, openOrb, orbOpen } = useVoice();
+  const isActive  = state !== "idle" || orbOpen;
   const title     = TITLES[pathname] || "Rasoi AI";
 
   return (
@@ -65,7 +65,7 @@ export default function Header({ onMenuClick, isMobile }: { onMenuClick?: () => 
           </span>
         )}
 
-        <div onClick={trigger} style={{ position: "relative", width: 44, height: 44, cursor: "pointer", flexShrink: 0 }}>
+        <div onClick={openOrb} style={{ position: "relative", width: 44, height: 44, cursor: "pointer", flexShrink: 0 }}>
           {isActive && (
             <>
               <div className="orb-ring orb-ring-1" />

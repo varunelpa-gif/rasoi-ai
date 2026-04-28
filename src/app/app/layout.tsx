@@ -4,6 +4,7 @@ import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
 import { VoiceProvider } from "@/context/VoiceContext";
 import ScreenSync from "./ScreenSync";
+import VoiceOrb from "@/components/ui/VoiceOrb";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [isMobile, setIsMobile]       = useState(false);
@@ -22,6 +23,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <VoiceProvider>
+      <VoiceOrb />
       <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
 
         {/* Mobile backdrop */}
