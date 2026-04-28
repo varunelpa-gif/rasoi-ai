@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useVoice } from "@/context/VoiceContext";
 import { Card, Badge, Btn, SectionTitle } from "@/components/ui/primitives";
 import DishSVG from "@/components/illustrations/DishSVG";
@@ -7,7 +7,25 @@ import { RECIPES, Recipe } from "@/lib/data";
 
 function RecipeDetail({ r, onBack }: { r: Recipe; onBack: () => void }) {
   const [step, setStep] = useState(0);
-  const { trigger } = useVoice();
+  const { trigger, speakText, setRecipeContext } = useVoice();
+
+  // Keep VoiceContext in sync with current step
+  useEffect(() => {
+    setRecipeContext({
+      name: r.name,
+      step,
+      stepText: r.steps[step].text,
+      totalSteps: r.steps.length,
+    });
+    return () => setRecipeContext(null);
+  }, [step, r, setRecipeContext]);
+
+  function goNext() { setStep(s => Math.min(r.steps.length - 1, s + 1)); }
+  function goPrev() { setStep(s => Math.max(0, s - 1)); }
+
+  function readStep(idx: number) {
+    speakText(`Step ${idx + 1}. ${r.steps[idx].text}`, `Step ${idx + 1}`);
+  }
 
   return (
     <div>
@@ -38,13 +56,13 @@ function RecipeDetail({ r, onBack }: { r: Recipe; onBack: () => void }) {
             </div>
           ))}
           <button onClick={trigger} style={{ marginTop: 16, width: "100%", padding: "9px", background: "oklch(78% 0.18 80 / 0.1)", border: "1px solid oklch(78% 0.18 80 / 0.35)", borderRadius: 10, color: "oklch(78% 0.18 80)", cursor: "pointer", fontSize: 12 }}>
-            🎙️ Suggest substitutes
+            🎙️ Ask about substitutes
           </button>
         </Card>
 
         <div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-            <SectionTitle sub="Voice-guided steps">Steps / विधि</SectionTitle>
+            <SectionTitle sub="Tap step or use buttons below">Steps / विधि</SectionTitle>
             <Badge color="saffron">Step {step + 1} / {r.steps.length}</Badge>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -72,10 +90,15 @@ function RecipeDetail({ r, onBack }: { r: Recipe; onBack: () => void }) {
               );
             })}
           </div>
+
+          {/* Navigation + voice */}
           <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
-            <Btn onClick={() => setStep(Math.max(0, step - 1))} variant="ghost" style={{ flex: 1 }}>← Prev</Btn>
-            <Btn onClick={trigger} variant="voice" style={{ flex: 1 }}>🎙️ Voice guide</Btn>
-            <Btn onClick={() => setStep(Math.min(r.steps.length - 1, step + 1))} variant="primary" style={{ flex: 1 }}>Next →</Btn>
+            <Btn onClick={goPrev} variant="ghost" style={{ flex: 1 }} disabled={step === 0}>← Prev</Btn>
+            <Btn onClick={() => readStep(step)} variant="voice" style={{ flex: 1 }}>🎙️ Read step</Btn>
+            <Btn onClick={goNext} variant="primary" style={{ flex: 1 }} disabled={step === r.steps.length - 1}>Next →</Btn>
+          </div>
+          <div style={{ marginTop: 10 }}>
+            <Btn onClick={trigger} variant="ghost" style={{ width: "100%", fontSize: 12 }}>🎙️ Ask Rasoi AI — "next step", "ingredients", "substitute for cream"…</Btn>
           </div>
         </div>
       </div>
@@ -98,7 +121,7 @@ export default function RecipePage() {
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16 }}>
         {RECIPES.map((r, i) => (
-          <Card key={r.id} onClick={() => setSel(i)} style={{ position: "relative" }}>
+          <Card key={r.id} onClick={() => setSel(i)} style={{ position: "relative", cursor: "pointer" }}>
             {r.active && <div style={{ position: "absolute", top: 12, right: 12 }}><Badge color="saffron">Active</Badge></div>}
             <div style={{ marginBottom: 14, borderRadius: 8, overflow: "hidden" }}>
               <DishSVG name={r.name} height={100} />
