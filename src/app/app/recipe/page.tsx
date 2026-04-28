@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useVoice } from "@/context/VoiceContext";
 import { Card, Badge, Btn, SectionTitle } from "@/components/ui/primitives";
 import DishSVG from "@/components/illustrations/DishSVG";
@@ -7,72 +7,96 @@ import { RECIPES, Recipe } from "@/lib/data";
 
 function RecipeDetail({ r, onBack }: { r: Recipe; onBack: () => void }) {
   const [step, setStep] = useState(0);
-  const { state, trigger, speakText, speakQueue, setRecipeContext } = useVoice();
-  const stopQueueRef = useRef<(() => void) | null>(null);
-  const isPlaying = state === "speaking" && stopQueueRef.current !== null;
+  const { state, autoReading, text, trigger, speakText, startAutoRead, stopAutoRead, pauseAutoRead, resumeAutoRead, setRecipeContext } = useVoice();
 
-  // Keep VoiceContext in sync with current step
+  const isPaused = state === "paused";
+
+  // Keep VoiceContext in sync with step
   useEffect(() => {
-    setRecipeContext({
-      name: r.name,
-      step,
-      stepText: r.steps[step].text,
-      totalSteps: r.steps.length,
-    });
+    setRecipeContext({ name: r.name, step, stepText: r.steps[step].text, totalSteps: r.steps.length });
     return () => setRecipeContext(null);
   }, [step, r, setRecipeContext]);
 
-  // Clean up queue on unmount
-  useEffect(() => {
-    return () => { stopQueueRef.current?.(); stopQueueRef.current = null; };
-  }, []);
+  // Cleanup on back
+  function handleBack() { stopAutoRead(); onBack(); }
 
-  function readStep(idx: number) {
-    stopQueueRef.current?.();
-    stopQueueRef.current = null;
-    speakText(`Step ${idx + 1}. ${r.steps[idx].text}`, `Step ${idx + 1}`);
-  }
-
-  const readAllFromStep = useCallback((startStep: number) => {
-    const items = r.steps.slice(startStep).map((s, i) => ({
-      text: `Step ${startStep + i + 1}. ${s.text}`,
-      label: `Step ${startStep + i + 1}`,
+  function beginConversation() {
+    const items = r.steps.map((s, i) => ({
+      text: `Step ${i + 1}. ${s.text}`,
+      stepLabel: `Step ${i + 1}`,
     }));
-    const stop = speakQueue(items, (queueIndex) => {
-      setStep(startStep + queueIndex);
-    });
-    stopQueueRef.current = stop;
-  }, [r, speakQueue]);
-
-  function stopPlayback() {
-    stopQueueRef.current?.();
-    stopQueueRef.current = null;
+    startAutoRead(items, step, setStep);
   }
 
-  function goNext() {
-    stopPlayback();
-    setStep(s => Math.min(r.steps.length - 1, s + 1));
-  }
-  function goPrev() {
-    stopPlayback();
-    setStep(s => Math.max(0, s - 1));
-  }
+  function goNext() { stopAutoRead(); setStep(s => Math.min(r.steps.length - 1, s + 1)); }
+  function goPrev() { stopAutoRead(); setStep(s => Math.max(0, s - 1)); }
+
+  const statusLabel =
+    isPaused      ? `Paused — say "continue" or tap Resume` :
+    autoReading && state === "listening" ? "Listening…" :
+    autoReading   ? "Reading steps…" : null;
 
   return (
     <div>
+      {/* Header */}
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 22 }}>
-        <Btn onClick={() => { stopPlayback(); onBack(); }} variant="ghost" style={{ padding: "7px 14px" }}>← Back</Btn>
+        <Btn onClick={handleBack} variant="ghost" style={{ padding: "7px 14px" }}>← Back</Btn>
         <div style={{ flex: 1 }}>
           <div style={{ fontFamily: "var(--ff-head)", fontSize: 22 }}>{r.name}</div>
-          <div style={{ fontSize: 13, color: "oklch(52% 0.03 70)" }}>{r.hindi} · {r.time} · Serves {r.serves} · <span style={{ color: "oklch(72% 0.14 155)" }}>Margin {r.margin}</span></div>
+          <div style={{ fontSize: 13, color: "oklch(52% 0.03 70)" }}>
+            {r.hindi} · {r.time} · Serves {r.serves} · <span style={{ color: "oklch(72% 0.14 155)" }}>Margin {r.margin}</span>
+          </div>
         </div>
-        <div style={{ display: "flex", gap: 6 }}>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           {r.allergens.map(a => <Badge key={a} color="ruby">{a}</Badge>)}
           {r.active && <Badge color="saffron">Active</Badge>}
         </div>
       </div>
 
+      {/* Conversation status bar */}
+      {(autoReading || isPaused) && (
+        <div style={{
+          background: isPaused ? "oklch(55% 0.12 50 / 0.15)" : "oklch(78% 0.18 80 / 0.08)",
+          border: `1px solid ${isPaused ? "oklch(65% 0.14 50 / 0.5)" : "oklch(78% 0.18 80 / 0.35)"}`,
+          borderRadius: 12, padding: "12px 16px", marginBottom: 18,
+          display: "flex", alignItems: "center", gap: 12,
+        }}>
+          <div style={{
+            width: 10, height: 10, borderRadius: "50%", flexShrink: 0,
+            background: isPaused ? "oklch(65% 0.14 50)" : "oklch(78% 0.18 80)",
+            animation: (!isPaused && state === "speaking") ? "dot-pulse 1.2s infinite" : "none",
+          }} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: isPaused ? "oklch(72% 0.12 50)" : "oklch(78% 0.18 80)", marginBottom: 2 }}>
+              {statusLabel}
+            </div>
+            {text && text !== "Listening…" && (
+              <div style={{ fontSize: 12, color: "oklch(62% 0.02 70)", lineHeight: 1.5 }}>{text}</div>
+            )}
+            {state === "listening" && (
+              <div style={{ fontSize: 11, color: "oklch(55% 0.03 70)", fontStyle: "italic" }}>
+                Say: "pause", "stop", "repeat", or ask anything…
+              </div>
+            )}
+          </div>
+          <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+            {isPaused ? (
+              <>
+                <button onClick={resumeAutoRead} style={{ padding: "6px 14px", borderRadius: 8, background: "oklch(78% 0.18 80)", border: "none", color: "oklch(14% 0.03 55)", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>▶ Resume</button>
+                <button onClick={stopAutoRead} style={{ padding: "6px 14px", borderRadius: 8, background: "oklch(28% 0.04 55)", border: "1px solid oklch(38% 0.04 55)", color: "oklch(60% 0.03 70)", fontSize: 12, cursor: "pointer" }}>⏹ Stop</button>
+              </>
+            ) : (
+              <>
+                <button onClick={pauseAutoRead} style={{ padding: "6px 14px", borderRadius: 8, background: "oklch(28% 0.04 55)", border: "1px solid oklch(38% 0.04 55)", color: "oklch(70% 0.03 70)", fontSize: 12, cursor: "pointer" }}>⏸ Pause</button>
+                <button onClick={stopAutoRead} style={{ padding: "6px 14px", borderRadius: 8, background: "oklch(28% 0.04 55)", border: "1px solid oklch(38% 0.04 55)", color: "oklch(60% 0.03 70)", fontSize: 12, cursor: "pointer" }}>⏹ Stop</button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       <div style={{ display: "grid", gridTemplateColumns: "0.85fr 1.15fr", gap: 20 }}>
+        {/* Ingredients */}
         <Card>
           <SectionTitle sub={`${r.serves} servings`}>
             Ingredients <span style={{ fontFamily: "var(--ff-body)", fontWeight: 400, fontSize: 13, color: "oklch(52% 0.03 70)" }}>/ सामग्री</span>
@@ -91,23 +115,19 @@ function RecipeDetail({ r, onBack }: { r: Recipe; onBack: () => void }) {
           </button>
         </Card>
 
+        {/* Steps */}
         <div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-            <SectionTitle sub="Tap any step or use buttons below">Steps / विधि</SectionTitle>
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              {isPlaying && (
-                <span style={{ fontSize: 11, color: "oklch(78% 0.18 80)", animation: "dot-pulse 1s infinite" }}>● Auto-reading</span>
-              )}
-              <Badge color="saffron">Step {step + 1} / {r.steps.length}</Badge>
-            </div>
+            <SectionTitle sub="Guided by your chef AI">Steps / विधि</SectionTitle>
+            <Badge color="saffron">Step {step + 1} / {r.steps.length}</Badge>
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
             {r.steps.map((s, i) => {
               const isCur = i === step, isDone = i < step;
               return (
-                <div key={i} onClick={() => { stopPlayback(); setStep(i); }} style={{
-                  display: "flex", gap: 14, padding: "14px 16px",
-                  borderRadius: 12, cursor: "pointer",
+                <div key={i} onClick={() => { stopAutoRead(); setStep(i); }} style={{
+                  display: "flex", gap: 14, padding: "14px 16px", borderRadius: 12, cursor: "pointer",
                   background: isCur ? "oklch(78% 0.18 80 / 0.08)" : "oklch(19% 0.04 55)",
                   border: `1px solid ${isCur ? "oklch(78% 0.18 80 / 0.4)" : "oklch(27% 0.04 55)"}`,
                   opacity: isDone ? 0.45 : 1, transition: "all 0.2s",
@@ -127,22 +147,36 @@ function RecipeDetail({ r, onBack }: { r: Recipe; onBack: () => void }) {
             })}
           </div>
 
-          {/* Main controls */}
-          <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
-            <Btn onClick={goPrev} variant="ghost" style={{ flex: 1 }}>← Prev</Btn>
-            {isPlaying ? (
-              <Btn onClick={stopPlayback} style={{ flex: 1, background: "oklch(55% 0.18 20)", border: "none" }}>⏹ Stop</Btn>
-            ) : (
-              <Btn onClick={() => readAllFromStep(step)} variant="voice" style={{ flex: 1 }}>▶ Read all steps</Btn>
-            )}
-            <Btn onClick={goNext} variant="primary" style={{ flex: 1 }}>Next →</Btn>
-          </div>
+          {/* Controls */}
+          {!autoReading && !isPaused ? (
+            <>
+              <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                <Btn onClick={goPrev} variant="ghost" style={{ flex: 1 }}>← Prev</Btn>
+                <Btn onClick={beginConversation} variant="voice" style={{ flex: 2 }}>
+                  🎙️ {step === 0 ? "Start guided cooking" : `Continue from step ${step + 1}`}
+                </Btn>
+                <Btn onClick={goNext} variant="primary" style={{ flex: 1 }}>Next →</Btn>
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <Btn onClick={() => speakText(`Step ${step + 1}. ${r.steps[step].text}`, `Step ${step + 1}`)} variant="ghost" style={{ flex: 1, fontSize: 12 }}>🔊 Read this step</Btn>
+                <Btn onClick={trigger} variant="ghost" style={{ flex: 1, fontSize: 12 }}>🎙️ Ask chef…</Btn>
+              </div>
+            </>
+          ) : (
+            <div style={{ display: "flex", gap: 8 }}>
+              <Btn onClick={goPrev} variant="ghost" style={{ flex: 1 }}>← Prev</Btn>
+              <Btn onClick={trigger} variant="ghost" style={{ flex: 2, fontSize: 12 }}>🎙️ Ask chef anything…</Btn>
+              <Btn onClick={goNext} variant="primary" style={{ flex: 1 }}>Next →</Btn>
+            </div>
+          )}
 
-          {/* Secondary controls */}
-          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-            <Btn onClick={() => readStep(step)} variant="ghost" style={{ flex: 1, fontSize: 12 }}>🎙️ Read this step</Btn>
-            <Btn onClick={trigger} variant="ghost" style={{ flex: 1, fontSize: 12 }}>🎙️ Ask Rasoi…</Btn>
-          </div>
+          {!autoReading && !isPaused && (
+            <div style={{ marginTop: 10, padding: "10px 14px", background: "oklch(19% 0.04 55)", borderRadius: 10, border: "1px solid oklch(27% 0.04 55)" }}>
+              <div style={{ fontSize: 11, color: "oklch(45% 0.03 70)", lineHeight: 1.6 }}>
+                💬 While reading, you can say: <span style={{ color: "oklch(62% 0.03 70)" }}>"pause"</span> · <span style={{ color: "oklch(62% 0.03 70)" }}>"stop"</span> · <span style={{ color: "oklch(62% 0.03 70)" }}>"repeat"</span> · <span style={{ color: "oklch(62% 0.03 70)" }}>"what's the substitute for cream?"</span> · <span style={{ color: "oklch(62% 0.03 70)" }}>"continue"</span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
