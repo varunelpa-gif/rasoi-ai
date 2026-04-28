@@ -193,6 +193,53 @@ function smartResponse(transcript: string, screen: string, recipeCtx: RecipeCtx 
   return lines[Math.floor(Math.random() * lines.length)].ai;
 }
 
+// ── Real Claude AI response (falls back to keyword matching) ──
+async function getSmartResponse(transcript: string, screen: string, recipeCtx: RecipeCtx | null): Promise<string> {
+  const apiKey = typeof window !== "undefined" ? localStorage.getItem("rasoi_api_key") : null;
+  if (!apiKey) return smartResponse(transcript, screen, recipeCtx);
+
+  const stock     = loadData("rasoi_stock",     STOCK);
+  const menu      = loadData("rasoi_menu",      MENU_ITEMS);
+  const staff     = loadData("rasoi_staff",     STAFF);
+  const recipes   = loadData("rasoi_recipes",   RECIPES);
+
+  const day = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][new Date().getDay()];
+  const ctx = [
+    `Screen: ${screen}`,
+    recipeCtx ? `Cooking: ${recipeCtx.name}, step ${recipeCtx.step + 1}/${recipeCtx.totalSteps}: "${recipeCtx.stepText}"` : "",
+    `On duty today: ${staff.filter((s: any) => s.shifts.includes(day)).map((s: any) => `${s.name} (${s.role}, ${s.station})`).join(", ") || "none"}`,
+    `Low stock: ${stock.filter((s: any) => s.stock <= s.reorder).map((s: any) => s.name).join(", ") || "none"}`,
+    `Top dishes: ${[...menu].sort((a: any, b: any) => b.margin - a.margin).slice(0, 3).map((m: any) => `${m.name} ${m.margin}%`).join(", ")}`,
+    `Recipes: ${recipes.map((r: any) => r.name).join(", ")}`,
+  ].filter(Boolean).join("\n");
+
+  try {
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), 6000);
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-allow-browser": "true",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 100,
+        system: `You are Rasoi AI, a voice assistant for an Indian restaurant kitchen. Answer in 1-2 short sentences (max 35 words). The answer is spoken aloud — no bullet points, no markdown, no lists. Be specific, practical, and helpful.\n\nKitchen context:\n${ctx}`,
+        messages: [{ role: "user", content: transcript }],
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(tid);
+    const data = await res.json();
+    if (data.content?.[0]?.text) return data.content[0].text;
+  } catch {}
+
+  return smartResponse(transcript, screen, recipeCtx);
+}
+
 // ── Helpers ───────────────────────────────────────────────────
 const isStop     = (t: string) => /(stop|end|cancel|quit|enough|finish|done cooking|exit)/i.test(t);
 const isPause    = (t: string) => /(pause|wait|hold on|hold it|slow down|one sec|just a|moment)/i.test(t);
@@ -335,7 +382,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       if (isContinue(t)) { pauseRef.current = false; return; }
 
       // Question while paused — answer and stay paused
-      const answer = smartResponse(heard, screenRef.current, recipeCtxRef.current);
+      const answer = await getSmartResponse(heard, screenRef.current, recipeCtxRef.current);
       await speakAsync(`${answer} — Say "continue" when you're ready.`, heard);
     }
   }, [listenOnce, speakAsync]);
@@ -410,7 +457,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
         }
 
         // It's a question — answer and offer to continue
-        const answer = smartResponse(heard, screenRef.current, recipeCtxRef.current);
+        const answer = await getSmartResponse(heard, screenRef.current, recipeCtxRef.current);
         await speakAsync(`${answer} — Ready for step ${i + 2}?`, heard);
         if (cancelRef.current) break;
 
@@ -478,7 +525,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       await new Promise<void>(r => { const tid = setTimeout(r, 300); timers.current.push(tid); });
       if (!orbOpenRef.current || cancelRef.current) break;
 
-      const answer = smartResponse(heard, screenRef.current, recipeCtxRef.current);
+      const answer = await getSmartResponse(heard, screenRef.current, recipeCtxRef.current);
       await speakAsync(answer, heard);
     }
 
@@ -499,8 +546,8 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   const ask = useCallback((question: string) => {
     stopAll();
     setState("processing"); setText(question);
-    const t = setTimeout(() => {
-      const response = smartResponse(question, screenRef.current, recipeCtxRef.current);
+    const t = setTimeout(async () => {
+      const response = await getSmartResponse(question, screenRef.current, recipeCtxRef.current);
       speakAsync(response, question).then(() => { setState("idle"); setText(""); });
     }, 300);
     timers.current.push(t);
@@ -538,8 +585,8 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       if (e.results[e.results.length - 1].isFinal) {
         recog.stop();
         setState("processing");
-        const t = setTimeout(() => {
-          const response = smartResponse(partial, screenRef.current, recipeCtxRef.current);
+        const t = setTimeout(async () => {
+          const response = await getSmartResponse(partial, screenRef.current, recipeCtxRef.current);
           speakAsync(response, partial).then(() => { setState("idle"); setText(""); });
         }, 400);
         timers.current.push(t);

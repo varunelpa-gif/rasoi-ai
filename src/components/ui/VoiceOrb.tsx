@@ -1,8 +1,22 @@
 "use client";
+import { useState, useEffect } from "react";
 import { useVoice } from "@/context/VoiceContext";
 
 export default function VoiceOrb() {
   const { state, text, orbOpen, closeOrb } = useVoice();
+  const [apiKey,       setApiKey]       = useState<string | null>(null);
+  const [showKeyInput, setShowKeyInput] = useState(false);
+  const [keyInput,     setKeyInput]     = useState("");
+
+  useEffect(() => {
+    if (orbOpen) setApiKey(localStorage.getItem("rasoi_api_key"));
+  }, [orbOpen]);
+
+  function saveKey() {
+    const k = keyInput.trim();
+    if (k) { localStorage.setItem("rasoi_api_key", k); setApiKey(k); }
+    setShowKeyInput(false); setKeyInput("");
+  }
 
   if (!orbOpen) return null;
 
@@ -177,6 +191,60 @@ export default function VoiceOrb() {
             </div>
           ) : null}
         </div>
+
+        {/* API key setup — shown at bottom when no key set */}
+        {!apiKey && !showKeyInput && (
+          <div onClick={() => setShowKeyInput(true)} style={{
+            position: "absolute", bottom: 118,
+            fontSize: 11, color: "oklch(32% 0 0)", cursor: "pointer",
+            borderBottom: "1px solid oklch(25% 0 0)", paddingBottom: 1,
+            letterSpacing: "0.04em",
+          }}>
+            ✦ Add Anthropic API key for real AI answers
+          </div>
+        )}
+
+        {showKeyInput && (
+          <div style={{
+            position: "absolute", bottom: 110,
+            display: "flex", flexDirection: "column", gap: 8, alignItems: "center", width: 300,
+          }}>
+            <div style={{ fontSize: 11, color: "oklch(38% 0 0)", marginBottom: 2 }}>
+              Paste your Anthropic API key (stored in browser only)
+            </div>
+            <input
+              autoFocus
+              type="password"
+              placeholder="sk-ant-api03-..."
+              value={keyInput}
+              onChange={e => setKeyInput(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") saveKey(); if (e.key === "Escape") { setShowKeyInput(false); setKeyInput(""); } }}
+              style={{
+                width: "100%", padding: "8px 12px", borderRadius: 8,
+                background: "oklch(10% 0 0)", border: "1px solid oklch(28% 0 0)",
+                color: "oklch(75% 0 0)", fontSize: 12, outline: "none",
+              }}
+            />
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={saveKey} style={{ padding: "6px 18px", borderRadius: 6, background: "oklch(22% 0 0)", border: "1px solid oklch(35% 0 0)", color: "oklch(70% 0 0)", fontSize: 12, cursor: "pointer" }}>
+                Save
+              </button>
+              <button onClick={() => { setShowKeyInput(false); setKeyInput(""); }} style={{ padding: "6px 14px", borderRadius: 6, background: "none", border: "1px solid oklch(22% 0 0)", color: "oklch(40% 0 0)", fontSize: 12, cursor: "pointer" }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {apiKey && (
+          <div style={{
+            position: "absolute", bottom: 118,
+            fontSize: 10, color: "oklch(26% 0 0)", letterSpacing: "0.04em",
+            cursor: "pointer",
+          }} onClick={() => { localStorage.removeItem("rasoi_api_key"); setApiKey(null); }}>
+            ✦ AI connected — tap to remove key
+          </div>
+        )}
 
         {/* Close button */}
         <button onClick={closeOrb} style={{
