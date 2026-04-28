@@ -70,6 +70,35 @@ function smartResponse(transcript: string, screen: string, recipeCtx: RecipeCtx 
     return `${namedRecipe.name} has ${namedRecipe.steps.length} steps and takes ${namedRecipe.time}. Step one — ${namedRecipe.steps[0].text}`;
   }
 
+  // Global: chopping / cutting / knife technique questions
+  if (t.includes("chop") || t.includes("cut") || t.includes("slice") || t.includes("dice") || t.includes("mince") || t.includes("julienne") || t.includes("grate") || t.includes("peel")) {
+    if (t.includes("onion"))
+      return "To chop onions: cut the top off, halve through the root, peel. Make horizontal cuts then vertical cuts towards the root, then slice across for an even dice. Keep the root intact — it holds the layers together. Chilling the onion for 10 minutes reduces tears.";
+    if (t.includes("garlic"))
+      return "To mince garlic: crush the clove flat with your knife to loosen the skin, peel it off. Slice thin, then rock your knife over the slices until finely minced. A pinch of salt helps break it into a paste.";
+    if (t.includes("tomato"))
+      return "To chop tomatoes: score a small X at the base, blanch in boiling water for 30 seconds, then peel. Halve, scoop out the seeds, and dice the flesh cleanly. For curries, just rough-chop is fine.";
+    if (t.includes("ginger"))
+      return "To chop ginger: scrape the skin off with the edge of a spoon, then slice into coins. Stack the coins and cut into matchsticks, then mince across. Or grate directly on a microplane for a smooth paste.";
+    if (t.includes("chilli") || t.includes("chili") || t.includes("pepper"))
+      return "To chop chillies: slit lengthwise, scrape out the seeds and white membrane to reduce heat, then slice or mince finely. Always wash your hands well after — avoid touching your eyes.";
+    if (t.includes("potato") || t.includes("carrot") || t.includes("vegetable"))
+      return "For even cuts: square off the sides first, then cut into planks, then into sticks, then dice. Consistent size means even cooking. A sharp knife and a stable board are the most important tools.";
+    return "Keep your knife sharp and use a claw grip — curl your fingertips under while holding the ingredient. A sharp knife is safer than a dull one. What are you cutting?";
+  }
+
+  // Global: how-to cooking questions
+  if ((t.includes("how") || t.includes("what") || t.includes("teach") || t.includes("explain")) && (t.includes("cook") || t.includes("make") || t.includes("prepare") || t.includes("fry") || t.includes("boil") || t.includes("marinate") || t.includes("season"))) {
+    if (t.includes("tadka") || t.includes("tarka") || t.includes("temper"))
+      return "Tadka: heat ghee until shimmering, add whole spices like cumin or mustard seeds, wait 20 to 30 seconds until they splutter, then pour immediately over the dish. The hot oil carries the flavour. Don't let it burn.";
+    if (t.includes("marinate"))
+      return "For marinating: always include an acid like yoghurt or lemon, a fat like oil, and spices. Chicken needs at least 2 hours, overnight is better. Always marinate in the fridge.";
+    if (t.includes("biryani"))
+      return "Biryani needs par-cooked rice at 70 percent done, layered with the cooked meat and gravy, then sealed and dum cooked on lowest flame for 25 minutes. Never lift the lid during dum.";
+    if (t.includes("roti") || t.includes("naan") || t.includes("bread"))
+      return "For soft rotis: knead the dough well until smooth, rest for 30 minutes, roll thin and cook on high heat. Press gently with a cloth while cooking so it puffs up.";
+  }
+
   if (t.includes("revenue") || t.includes("profit")) {
     const rev = menu.reduce((s: number, i: any) => s + i.price * i.sales, 0);
     const top = [...menu].sort((a: any, b: any) => b.margin - a.margin)[0];
