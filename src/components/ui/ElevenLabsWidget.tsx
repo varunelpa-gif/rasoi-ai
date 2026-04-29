@@ -1,9 +1,7 @@
 "use client";
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 
 export default function ElevenLabsWidget() {
-  const ref = useRef<HTMLElement | null>(null);
-
   useEffect(() => {
     if (!document.querySelector('script[src*="elevenlabs"]')) {
       const s = document.createElement("script");
@@ -13,63 +11,61 @@ export default function ElevenLabsWidget() {
       document.head.appendChild(s);
     }
 
-    // Inject CSS into shadow DOM to hide launcher button once it's ready
-    const hideLauncher = (el: any, attempts = 0) => {
+    // Once shadow DOM is ready, hide the floating launcher bubble
+    const hideLauncher = (el: any, n = 0) => {
       const sr = el.shadowRoot;
       if (sr) {
-        if (!sr.querySelector("#rasoi-hide-launcher")) {
+        if (!sr.querySelector("#rasoi-style")) {
           const style = document.createElement("style");
-          style.id = "rasoi-hide-launcher";
-          // Hide the floating launcher bubble — all possible button/launcher elements
+          style.id = "rasoi-style";
+          // Launcher uses shadow-md + pointer-events-auto; panel uses shadow-lg
+          // Hide only the launcher, keep the conversation panel visible
           style.textContent = `
-            button[class*="launcher"], div[class*="launcher"],
-            [class*="call-button"], [class*="start-call"],
-            [class*="need-help"], [class*="fab"],
-            button:first-child { display: none !important; }
+            .shadow-md.pointer-events-auto { display: none !important; }
           `;
           sr.appendChild(style);
         }
-      } else if (attempts < 20) {
-        setTimeout(() => hideLauncher(el, attempts + 1), 300);
+      } else if (n < 30) {
+        setTimeout(() => hideLauncher(el, n + 1), 300);
       }
     };
 
     const trigger = () => {
-      const el = ref.current as any;
+      const el = document.querySelector("elevenlabs-convai") as any;
       if (!el) return;
 
-      // Dispatch the internal call event — bypasses the launcher entirely
-      el.dispatchEvent(new CustomEvent("elevenlabs-convai:call", {
+      // Step 1: expand the panel
+      document.dispatchEvent(new CustomEvent("elevenlabs-agent:expand", {
+        detail: { action: "expand" },
         bubbles: true,
-        composed: true,
-        detail: { config: {} },
       }));
+
+      // Step 2: click "Start a call" button inside shadow DOM
+      const tryStart = (attempts = 0) => {
+        const sr = el.shadowRoot;
+        const btn = sr?.querySelector('[aria-label="Start a call"]') as HTMLElement | null;
+        if (btn) {
+          btn.click();
+          return;
+        }
+        if (attempts < 25) setTimeout(() => tryStart(attempts + 1), 150);
+      };
+      // Give the panel a moment to expand before clicking
+      setTimeout(() => tryStart(), 200);
     };
+
+    // Watch for the widget to mount then hide its launcher
+    const waitForEl = (n = 0) => {
+      const el = document.querySelector("elevenlabs-convai") as any;
+      if (el) { hideLauncher(el); return; }
+      if (n < 30) setTimeout(() => waitForEl(n + 1), 500);
+    };
+    waitForEl();
 
     window.addEventListener("rasoi-voice-trigger", trigger);
-
-    // Start hiding the launcher once the element is available
-    const checkEl = (n = 0) => {
-      if (ref.current) { hideLauncher(ref.current); return; }
-      if (n < 20) setTimeout(() => checkEl(n + 1), 300);
-    };
-    checkEl();
-
     return () => window.removeEventListener("rasoi-voice-trigger", trigger);
   }, []);
 
   const Widget = "elevenlabs-convai" as any;
-  return (
-    <>
-      {/* Host element positioned off-screen — conversation panel uses position:fixed internally so it renders on-screen */}
-      <style>{`
-        elevenlabs-convai {
-          position: fixed !important;
-          bottom: -9999px !important;
-          right: -9999px !important;
-        }
-      `}</style>
-      <Widget ref={ref} agent-id="agent_8001kqa0w3yhf98bxhtrsqxs09g5" />
-    </>
-  );
+  return <Widget agent-id="agent_8001kqa0w3yhf98bxhtrsqxs09g5" />;
 }
