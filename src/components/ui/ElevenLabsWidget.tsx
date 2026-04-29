@@ -18,8 +18,9 @@ export default function ElevenLabsWidget() {
 
     const getEl  = () => document.querySelector("elevenlabs-convai") as any;
     const getSr  = () => getEl()?.shadowRoot as ShadowRoot | null;
-    const showEl = () => { const e = getEl(); if (e) e.style.visibility = "visible"; };
-    const hideEl = () => { const e = getEl(); if (e) e.style.visibility = "hidden";  };
+    // opacity:0 keeps the element "rendered" so .click() fires (visibility:hidden breaks .click())
+    const showEl = () => { const e = getEl(); if (e) { e.style.opacity = "1"; e.style.pointerEvents = "auto"; } };
+    const hideEl = () => { const e = getEl(); if (e) { e.style.opacity = "0"; e.style.pointerEvents = "none"; } };
 
     // With always-expanded the "Start a call" button is always in the DOM.
     // Retry in case the widget script hasn't fully initialised yet.
@@ -27,8 +28,6 @@ export default function ElevenLabsWidget() {
       if (inCallRef.current) return;
       const sr = getSr();
       if (!sr) return;
-
-      showEl();
 
       const tryStart = (n = 0) => {
         if (inCallRef.current) return;
@@ -40,7 +39,6 @@ export default function ElevenLabsWidget() {
           return;
         }
         if (n < 30) setTimeout(() => tryStart(n + 1), 200);
-        else hideEl(); // give up — hide if we couldn't start
       };
       tryStart();
     };
@@ -57,7 +55,6 @@ export default function ElevenLabsWidget() {
     const poll = setInterval(() => {
       if (!inCallRef.current) return;
       if (!getSr()?.querySelector('[aria-label="End"]')) {
-        hideEl();
         inCallRef.current = false;
         window.dispatchEvent(new Event("rasoi-call-ended"));
       }
@@ -75,8 +72,8 @@ export default function ElevenLabsWidget() {
   const Widget = "elevenlabs-convai" as any;
   return (
     <>
-      {/* Hidden until mic is clicked; always-expanded keeps the panel rendered without a launcher */}
-      <style>{`elevenlabs-convai { visibility: hidden; }`}</style>
+      {/* Invisible but rendered — opacity:0 lets .click() fire unlike visibility:hidden */}
+      <style>{`elevenlabs-convai { opacity: 0; pointer-events: none; }`}</style>
       <Widget agent-id={AGENT_ID} always-expanded="true" />
     </>
   );
