@@ -1,6 +1,5 @@
 "use client";
 import { useState, useEffect } from "react";
-import { useVoice } from "@/context/VoiceContext";
 import { Card, Badge, Btn } from "@/components/ui/primitives";
 
 interface Timer {
@@ -21,7 +20,6 @@ const fmt = (s: number) =>
   `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 
 export default function TimersPage() {
-  const { trigger } = useVoice();
   const [timers, setTimers] = useState<Timer[]>([
     { id: 1, name: "Dal Makhani",      total: 1800, rem: 1240, running: true,  color: "saffron"    },
     { id: 2, name: "Biryani Dum",      total: 1500, rem: 368,  running: true,  color: "terracotta" },
@@ -45,7 +43,6 @@ export default function TimersPage() {
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 22 }}>
         <div style={{ fontSize: 13, color: "oklch(52% 0.03 70)" }}>{timers.filter(t => t.running).length} timers active</div>
         <div style={{ display: "flex", gap: 10 }}>
-          <Btn onClick={trigger} variant="voice">🎙️ Voice timer</Btn>
           <Btn onClick={addTimer} variant="primary">+ Add Timer</Btn>
         </div>
       </div>

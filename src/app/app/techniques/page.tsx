@@ -1,6 +1,5 @@
 "use client";
 import { useState } from "react";
-import { useVoice } from "@/context/VoiceContext";
 import { Card, Badge, Btn } from "@/components/ui/primitives";
 import TechSVG from "@/components/illustrations/TechSVG";
 import { TECHS, Technique } from "@/lib/data";
@@ -8,7 +7,6 @@ import { TECHS, Technique } from "@/lib/data";
 const DIFF_COLOR: Record<string, string> = { Easy: "mint", Medium: "saffron", Hard: "terracotta" };
 
 function TechDetail({ t, onBack }: { t: Technique; onBack: () => void }) {
-  const { trigger, speakText } = useVoice();
   return (
     <div>
       <Btn onClick={onBack} variant="ghost" style={{ marginBottom: 22, padding: "7px 14px" }}>← Back</Btn>
@@ -31,12 +29,6 @@ function TechDetail({ t, onBack }: { t: Technique; onBack: () => void }) {
             <div style={{ fontSize: 13, lineHeight: 1.65 }}>{s}</div>
           </div>
         ))}
-        <div style={{ marginTop: 22 }}>
-          <div style={{ display: "flex", gap: 8 }}>
-            <Btn onClick={() => speakText(`${t.name}. ${t.desc} ${t.steps.join(". ")}`, t.name)} variant="voice" style={{ flex: 1 }}>▶ Read aloud</Btn>
-            <Btn onClick={trigger} variant="ghost" style={{ flex: 1 }}>🎙️ Ask Rasoi…</Btn>
-          </div>
-        </div>
       </Card>
     </div>
   );

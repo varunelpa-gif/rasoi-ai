@@ -1,6 +1,5 @@
 "use client";
 import { useState } from "react";
-import { useVoice } from "@/context/VoiceContext";
 import { Card, Badge, Btn } from "@/components/ui/primitives";
 import { useStaff, type StaffMember } from "@/lib/useLocalData";
 
@@ -29,7 +28,6 @@ function initials(name: string) {
 }
 
 export default function StaffPage() {
-  const { trigger, ask } = useVoice();
   const { members, add, update, remove } = useStaff();
   const [day, setDay] = useState("Mon");
   const today = members.filter(s => s.shifts.includes(day));
@@ -117,9 +115,6 @@ export default function StaffPage() {
                 <Btn onClick={openAdd} style={{ fontSize: 12 }}>+ Add Staff Member</Btn>
               </Card>
             )}
-          </div>
-          <div style={{ marginTop: 14 }}>
-            <Btn onClick={() => ask("who is working today and what station are they on")} variant="voice" style={{ width: "100%" }}>🎙️ Who&apos;s on each station?</Btn>
           </div>
         </div>
 

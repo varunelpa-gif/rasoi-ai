@@ -1,6 +1,5 @@
 "use client";
 import { useState } from "react";
-import { useVoice } from "@/context/VoiceContext";
 import { Card, Badge, Btn } from "@/components/ui/primitives";
 import { SUPPLIERS } from "@/lib/data";
 
@@ -8,7 +7,6 @@ const STATUS_LABEL: Record<string, string> = { active: "Active", "order-placed":
 const STATUS_COLOR: Record<string, string> = { active: "mint",  "order-placed": "saffron",       inactive: "muted" };
 
 export default function SuppliersPage() {
-  const { trigger, ask } = useVoice();
   const [expanded, setExpanded] = useState<number | null>(null);
 
   return (
@@ -16,7 +14,6 @@ export default function SuppliersPage() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 22 }}>
         <div style={{ fontSize: 13, color: "oklch(52% 0.03 70)" }}>{SUPPLIERS.length} suppliers</div>
         <div style={{ display: "flex", gap: 10 }}>
-          <Btn onClick={() => ask("what items need urgent reordering and what pending orders do we have")} variant="voice">🎙️ Reorder essentials</Btn>
           <Btn variant="primary">+ Add Supplier</Btn>
         </div>
       </div>
@@ -46,7 +43,6 @@ export default function SuppliersPage() {
                 <div style={{ paddingTop: 16, borderTop: "1px solid oklch(27% 0.04 55)", display: "flex", gap: 9 }}>
                   <Btn variant="primary" style={{ flex: 1, textAlign: "center" }}>Place Order</Btn>
                   <Btn variant="ghost"   style={{ flex: 1, textAlign: "center" }}>View History</Btn>
-                  <Btn onClick={e => { e.stopPropagation(); ask("what pending orders and delivery status"); }} variant="voice" style={{ flex: 1, textAlign: "center" }}>🎙️ Order status</Btn>
                 </div>
               )}
             </Card>

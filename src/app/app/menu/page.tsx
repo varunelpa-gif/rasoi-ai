@@ -1,11 +1,9 @@
 "use client";
 import { useState } from "react";
-import { useVoice } from "@/context/VoiceContext";
 import { Card, Btn } from "@/components/ui/primitives";
 import { useMenu } from "@/lib/useLocalData";
 
 export default function MenuPage() {
-  const { trigger } = useVoice();
   const { items: MENU_ITEMS } = useMenu();
   const [sortBy, setSortBy] = useState<"margin"|"sales"|"price"|"cost">("margin");
   const sorted = [...MENU_ITEMS].sort((a, b) => b[sortBy] - a[sortBy]);
@@ -41,7 +39,6 @@ export default function MenuPage() {
                 {s.charAt(0).toUpperCase() + s.slice(1)}
               </button>
             ))}
-            <Btn onClick={trigger} variant="voice" style={{ padding: "4px 12px", fontSize: 12 }}>🎙️ Ask AI</Btn>
           </div>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 80px 80px 80px 1.6fr", padding: "10px 22px", borderBottom: "1px solid oklch(27% 0.04 55)", fontSize: 11, color: "oklch(48% 0.03 70)", textTransform: "uppercase", letterSpacing: "0.07em" }}>
