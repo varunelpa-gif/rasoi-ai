@@ -5,7 +5,6 @@ export default function ElevenLabsWidget() {
   const ref = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
-    // Load the ElevenLabs embed script
     if (!document.querySelector('script[src*="elevenlabs"]')) {
       const s = document.createElement("script");
       s.src = "https://unpkg.com/@elevenlabs/convai-widget-embed";
@@ -14,42 +13,61 @@ export default function ElevenLabsWidget() {
       document.head.appendChild(s);
     }
 
-    // Listen for our custom mic button trigger
+    // Inject CSS into shadow DOM to hide launcher button once it's ready
+    const hideLauncher = (el: any, attempts = 0) => {
+      const sr = el.shadowRoot;
+      if (sr) {
+        if (!sr.querySelector("#rasoi-hide-launcher")) {
+          const style = document.createElement("style");
+          style.id = "rasoi-hide-launcher";
+          // Hide the floating launcher bubble — all possible button/launcher elements
+          style.textContent = `
+            button[class*="launcher"], div[class*="launcher"],
+            [class*="call-button"], [class*="start-call"],
+            [class*="need-help"], [class*="fab"],
+            button:first-child { display: none !important; }
+          `;
+          sr.appendChild(style);
+        }
+      } else if (attempts < 20) {
+        setTimeout(() => hideLauncher(el, attempts + 1), 300);
+      }
+    };
+
     const trigger = () => {
       const el = ref.current as any;
       if (!el) return;
 
-      // Try official API methods first
-      if (typeof el.open        === "function") { el.open();         return; }
-      if (typeof el.startCall   === "function") { el.startCall();    return; }
-      if (typeof el.startSession === "function") { el.startSession(); return; }
-
-      // Fall back: click the widget's internal shadow DOM button
-      const tryClick = (attempts = 0) => {
-        const btn = el.shadowRoot?.querySelector("button");
-        if (btn) { btn.click(); return; }
-        if (attempts < 10) setTimeout(() => tryClick(attempts + 1), 300);
-      };
-      tryClick();
+      // Dispatch the internal call event — bypasses the launcher entirely
+      el.dispatchEvent(new CustomEvent("elevenlabs-convai:call", {
+        bubbles: true,
+        composed: true,
+        detail: { config: {} },
+      }));
     };
 
     window.addEventListener("rasoi-voice-trigger", trigger);
+
+    // Start hiding the launcher once the element is available
+    const checkEl = (n = 0) => {
+      if (ref.current) { hideLauncher(ref.current); return; }
+      if (n < 20) setTimeout(() => checkEl(n + 1), 300);
+    };
+    checkEl();
+
     return () => window.removeEventListener("rasoi-voice-trigger", trigger);
   }, []);
 
   const Widget = "elevenlabs-convai" as any;
   return (
     <>
-      {/* Hide the default floating launcher — we use our own mic button */}
+      {/* Host element positioned off-screen — conversation panel uses position:fixed internally so it renders on-screen */}
       <style>{`
         elevenlabs-convai {
           position: fixed !important;
-          bottom: 24px !important;
-          right: 24px !important;
+          bottom: -9999px !important;
+          right: -9999px !important;
         }
-        /* Try to hide launcher bubble via CSS parts (works if widget supports it) */
-        elevenlabs-convai::part(launcher) { display: none !important; }
-        elevenlabs-convai::part(button)   { display: none !important; }
       `}</style>
       <Widget ref={ref} agent-id="agent_8001kqa0w3yhf98bxhtrsqxs09g5" />
     </>
