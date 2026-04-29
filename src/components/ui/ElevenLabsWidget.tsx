@@ -39,20 +39,36 @@ export default function ElevenLabsWidget() {
     };
 
     // MutationObserver: detect when "End" button appears/disappears
+    // Debounced to avoid false "ended" events during transient DOM mutations
     let observer: MutationObserver | null = null;
     const watchCallState = (el: any) => {
       const sr = el.shadowRoot;
       if (!sr || observer) return;
       let wasInCall = false;
+      let endTimer: ReturnType<typeof setTimeout> | null = null;
+
       observer = new MutationObserver(() => {
-        const endBtn = sr.querySelector('[aria-label="End"]');
-        const nowInCall = !!endBtn;
-        if (nowInCall !== wasInCall) {
-          wasInCall = nowInCall;
-          window.dispatchEvent(new Event(nowInCall ? "rasoi-call-started" : "rasoi-call-ended"));
+        const nowInCall = !!sr.querySelector('[aria-label="End"]');
+
+        if (nowInCall && !wasInCall) {
+          // Call just started — fire immediately
+          if (endTimer) { clearTimeout(endTimer); endTimer = null; }
+          wasInCall = true;
+          window.dispatchEvent(new Event("rasoi-call-started"));
+        } else if (!nowInCall && wasInCall) {
+          // Debounce: only fire "ended" if End button stays gone for 800 ms
+          if (!endTimer) {
+            endTimer = setTimeout(() => {
+              endTimer = null;
+              if (!sr.querySelector('[aria-label="End"]')) {
+                wasInCall = false;
+                window.dispatchEvent(new Event("rasoi-call-ended"));
+              }
+            }, 800);
+          }
         }
       });
-      observer.observe(sr, { childList: true, subtree: true, attributes: true });
+      observer.observe(sr, { childList: true, subtree: true });
     };
 
     // Wait for element then hide launcher + watch state
