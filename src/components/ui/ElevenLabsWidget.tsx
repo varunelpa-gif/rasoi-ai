@@ -16,84 +16,52 @@ export default function ElevenLabsWidget() {
       document.head.appendChild(s);
     }
 
-    const getEl = () => document.querySelector("elevenlabs-convai") as any;
+    const getEl  = () => document.querySelector("elevenlabs-convai") as any;
+    const getSr  = () => getEl()?.shadowRoot as ShadowRoot | null;
+    const showEl = () => { const e = getEl(); if (e) e.style.visibility = "visible"; };
+    const hideEl = () => { const e = getEl(); if (e) e.style.visibility = "hidden";  };
 
-    // Hide launcher bubble (visibility:hidden keeps programmatic .click() working)
-    const injectStyle = (el: any, n = 0) => {
-      const sr = el.shadowRoot;
-      if (sr) {
-        if (!sr.querySelector("#rasoi-style")) {
-          const style = document.createElement("style");
-          style.id = "rasoi-style";
-          style.textContent = `
-            .shadow-md.pointer-events-auto {
-              visibility: hidden !important;
-              pointer-events: none !important;
-            }
-          `;
-          sr.appendChild(style);
-        }
-        return;
-      }
-      if (n < 40) setTimeout(() => injectStyle(el, n + 1), 250);
-    };
-
-    const waitAndInit = (n = 0) => {
-      const el = getEl();
-      if (el) { injectStyle(el); return; }
-      if (n < 40) setTimeout(() => waitAndInit(n + 1), 250);
-    };
-    waitAndInit();
-
-    // Poll every 1.5 s to detect when ElevenLabs ends the call naturally
-    const poll = setInterval(() => {
-      if (!inCallRef.current) return;
-      const sr = getEl()?.shadowRoot;
-      if (sr && !sr.querySelector('[aria-label="End"]')) {
-        inCallRef.current = false;
-        window.dispatchEvent(new Event("rasoi-call-ended"));
-      }
-    }, 1500);
-
+    // With always-expanded the "Start a call" button is always in the DOM.
+    // Retry in case the widget script hasn't fully initialised yet.
     const startCall = () => {
-      if (inCallRef.current) return; // already in a call
-
-      const el = getEl();
-      const sr = el?.shadowRoot;
+      if (inCallRef.current) return;
+      const sr = getSr();
       if (!sr) return;
 
-      // Expand the panel
-      const launcher = sr.querySelector(".shadow-md.pointer-events-auto") as HTMLElement | null;
-      if (launcher) launcher.click();
-      document.dispatchEvent(new CustomEvent("elevenlabs-agent:expand", {
-        detail: { action: "expand" },
-        bubbles: true,
-      }));
+      showEl();
 
-      // Click "Start a call" — stop retrying once clicked
-      let clicked = false;
-      const tryStart = (attempts = 0) => {
-        if (clicked) return;
+      const tryStart = (n = 0) => {
+        if (inCallRef.current) return;
         const btn = sr.querySelector('[aria-label="Start a call"]') as HTMLElement | null;
         if (btn) {
-          clicked = true;
           inCallRef.current = true;
           btn.click();
           window.dispatchEvent(new Event("rasoi-call-started"));
           return;
         }
-        if (attempts < 25) setTimeout(() => tryStart(attempts + 1), 200);
+        if (n < 30) setTimeout(() => tryStart(n + 1), 200);
+        else hideEl(); // give up — hide if we couldn't start
       };
-      setTimeout(() => tryStart(), 300);
+      tryStart();
     };
 
     const endCall = () => {
-      const sr = getEl()?.shadowRoot;
-      const btn = sr?.querySelector('[aria-label="End"]') as HTMLElement | null;
-      if (btn) btn.click();
+      const endBtn = getSr()?.querySelector('[aria-label="End"]') as HTMLElement | null;
+      if (endBtn) endBtn.click();
+      hideEl();
       inCallRef.current = false;
       window.dispatchEvent(new Event("rasoi-call-ended"));
     };
+
+    // Detect when ElevenLabs ends the call naturally
+    const poll = setInterval(() => {
+      if (!inCallRef.current) return;
+      if (!getSr()?.querySelector('[aria-label="End"]')) {
+        hideEl();
+        inCallRef.current = false;
+        window.dispatchEvent(new Event("rasoi-call-ended"));
+      }
+    }, 1500);
 
     window.addEventListener("rasoi-voice-trigger", startCall);
     window.addEventListener("rasoi-end-call",      endCall);
@@ -105,5 +73,11 @@ export default function ElevenLabsWidget() {
   }, []);
 
   const Widget = "elevenlabs-convai" as any;
-  return <Widget agent-id={AGENT_ID} />;
+  return (
+    <>
+      {/* Hidden until mic is clicked; always-expanded keeps the panel rendered without a launcher */}
+      <style>{`elevenlabs-convai { visibility: hidden; }`}</style>
+      <Widget agent-id={AGENT_ID} always-expanded="true" />
+    </>
+  );
 }
