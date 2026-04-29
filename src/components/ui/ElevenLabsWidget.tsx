@@ -5,7 +5,8 @@ const WIDGET_SRC = "https://unpkg.com/@elevenlabs/convai-widget-embed@0.11.6/dis
 const AGENT_ID   = "agent_8001kqa0w3yhf98bxhtrsqxs09g5";
 
 export default function ElevenLabsWidget() {
-  const inCallRef = useRef(false);
+  const inCallRef    = useRef(false);
+  const seenEndRef   = useRef(false);   // tracks whether "End" btn appeared this call
 
   useEffect(() => {
     if (!document.querySelector(`script[src="${WIDGET_SRC}"]`)) {
@@ -16,18 +17,15 @@ export default function ElevenLabsWidget() {
       document.head.appendChild(s);
     }
 
-    const getEl  = () => document.querySelector("elevenlabs-convai") as any;
-    const getSr  = () => getEl()?.shadowRoot as ShadowRoot | null;
-    // opacity:0 keeps the element "rendered" so .click() fires (visibility:hidden breaks .click())
-    const showEl = () => { const e = getEl(); if (e) { e.style.opacity = "1"; e.style.pointerEvents = "auto"; } };
-    const hideEl = () => { const e = getEl(); if (e) { e.style.opacity = "0"; e.style.pointerEvents = "none"; } };
+    const getEl = () => document.querySelector("elevenlabs-convai") as any;
+    const getSr = () => getEl()?.shadowRoot as ShadowRoot | null;
 
-    // With always-expanded the "Start a call" button is always in the DOM.
-    // Retry in case the widget script hasn't fully initialised yet.
     const startCall = () => {
       if (inCallRef.current) return;
       const sr = getSr();
       if (!sr) return;
+
+      seenEndRef.current = false;
 
       const tryStart = (n = 0) => {
         if (inCallRef.current) return;
@@ -46,19 +44,24 @@ export default function ElevenLabsWidget() {
     const endCall = () => {
       const endBtn = getSr()?.querySelector('[aria-label="End"]') as HTMLElement | null;
       if (endBtn) endBtn.click();
-      hideEl();
       inCallRef.current = false;
+      seenEndRef.current = false;
       window.dispatchEvent(new Event("rasoi-call-ended"));
     };
 
-    // Detect when ElevenLabs ends the call naturally
+    // Only fire "call ended" after we've actually seen the "End" button appear,
+    // preventing false positives during the brief connecting phase.
     const poll = setInterval(() => {
       if (!inCallRef.current) return;
-      if (!getSr()?.querySelector('[aria-label="End"]')) {
-        inCallRef.current = false;
+      const hasEnd = !!getSr()?.querySelector('[aria-label="End"]');
+      if (hasEnd) {
+        seenEndRef.current = true;
+      } else if (seenEndRef.current) {
+        inCallRef.current  = false;
+        seenEndRef.current = false;
         window.dispatchEvent(new Event("rasoi-call-ended"));
       }
-    }, 1500);
+    }, 1000);
 
     window.addEventListener("rasoi-voice-trigger", startCall);
     window.addEventListener("rasoi-end-call",      endCall);
@@ -72,9 +75,9 @@ export default function ElevenLabsWidget() {
   const Widget = "elevenlabs-convai" as any;
   return (
     <>
-      {/* Invisible but rendered — opacity:0 lets .click() fire unlike visibility:hidden */}
-      <style>{`elevenlabs-convai { opacity: 0; pointer-events: none; }`}</style>
-      <Widget agent-id={AGENT_ID} always-expanded="true" />
+      {/* opacity:0 keeps element rendered so .click() fires; pointer-events:none hides from users */}
+      <style>{`elevenlabs-convai { opacity: 0 !important; pointer-events: none !important; }`}</style>
+      <Widget agent-id={AGENT_ID} />
     </>
   );
 }
