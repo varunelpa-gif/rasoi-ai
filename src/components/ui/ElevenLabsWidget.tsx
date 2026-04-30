@@ -19,6 +19,7 @@ declare global {
 export default function ElevenLabsWidget() {
   const sessionRef  = useRef<{ endSession(): Promise<void> } | null>(null);
   const startingRef = useRef(false);
+  const closingRef  = useRef(false);
 
   useEffect(() => {
     // Load the self-contained IIFE bundle so Next.js bundling doesn't interfere
@@ -51,6 +52,7 @@ export default function ElevenLabsWidget() {
             } else if (status === "disconnected") {
               sessionRef.current  = null;
               startingRef.current = false;
+              closingRef.current  = false;
               window.dispatchEvent(new Event("rasoi-call-ended"));
             }
           },
@@ -61,15 +63,19 @@ export default function ElevenLabsWidget() {
         console.error("[Rasoi] Voice session error:", err);
         sessionRef.current  = null;
         startingRef.current = false;
+        closingRef.current  = false;
         window.dispatchEvent(new Event("rasoi-call-ended"));
       }
     };
 
     const endCall = async () => {
       startingRef.current = false;
-      if (sessionRef.current) {
-        await sessionRef.current.endSession().catch(() => {});
+      if (sessionRef.current && !closingRef.current) {
+        closingRef.current = true;
+        const s = sessionRef.current;
         sessionRef.current = null;
+        await s.endSession().catch(() => {});
+        closingRef.current = false;
       }
       window.dispatchEvent(new Event("rasoi-call-ended"));
     };
@@ -79,7 +85,11 @@ export default function ElevenLabsWidget() {
     return () => {
       window.removeEventListener("rasoi-voice-trigger", startCall);
       window.removeEventListener("rasoi-end-call",      endCall);
-      sessionRef.current?.endSession().catch(() => {});
+      if (sessionRef.current && !closingRef.current) {
+        closingRef.current = true;
+        sessionRef.current.endSession().catch(() => {});
+        sessionRef.current = null;
+      }
     };
   }, []);
 
