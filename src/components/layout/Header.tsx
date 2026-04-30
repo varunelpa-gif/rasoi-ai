@@ -30,21 +30,12 @@ export default function Header({ onMenuClick, isMobile }: { onMenuClick?: () => 
     };
   }, []);
 
-  async function handleMic() {
+  function handleMic() {
     if (inCall) {
       window.dispatchEvent(new Event("rasoi-end-call"));
       return;
     }
     setRinging(true);
-    // Grant mic permission in user-gesture chain so the widget's getUserMedia
-    // succeeds even after the async retry loop consumes the activation.
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      stream.getTracks().forEach(t => t.stop());
-    } catch {
-      setRinging(false);
-      return;
-    }
     window.dispatchEvent(new Event("rasoi-voice-trigger"));
   }
 
