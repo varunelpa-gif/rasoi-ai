@@ -15,6 +15,7 @@ export default function ElevenLabsWidget() {
       try {
         const session = await VoiceConversation.startSession({
           agentId: AGENT_ID,
+          connectionType: "websocket",
           onStatusChange: ({ status }) => {
             if (status === "connecting") {
               window.dispatchEvent(new Event("rasoi-call-started"));
